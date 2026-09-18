@@ -3,10 +3,11 @@
 import { copyFileSync, mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const dist = dirname(require.resolve("@rdkit/rdkit"));
-const out = new URL("../public/rdkit/", import.meta.url).pathname;
+const out = fileURLToPath(new URL("../public/rdkit/", import.meta.url)); // fileURLToPath: works on Windows too
 mkdirSync(out, { recursive: true });
 for (const f of ["RDKit_minimal.js", "RDKit_minimal.wasm"]) copyFileSync(join(dist, f), join(out, f));
 console.log(`copied RDKit_minimal.{js,wasm} from ${dist} to public/rdkit/`);
