@@ -26,7 +26,7 @@ import { ImportExportDialog } from "./ui/ImportExportDialog";
 import type { DialogMode } from "./ui/ImportExportDialog";
 import { ShortcutsOverlay } from "./ui/ShortcutsOverlay";
 import { AssistantPanel } from "./ui/AssistantPanel";
-import type { ExplainerChoice } from "./ui/AssistantPanel";
+import type { ExplainerChoice, QaEntry } from "./ui/AssistantPanel";
 import { RetroPanel } from "./ui/RetroPanel";
 import { RULE_ANALYSIS } from "./ai/analysis";
 import { applySuggestion } from "./ai/suggestions";
@@ -35,6 +35,8 @@ import type { Explanation, Suggestion } from "./ai/types";
 import { MockRetrosynthesisService } from "./retro/mockRetrosynthesis";
 import type { DisconnectionCandidate, ReactionRecord, TargetAnalysis } from "./retro/types";
 import { PROVENANCE_POLICY, applySafetyDecision } from "./retro/types";
+import { RuleBasedSynthesisPlanner, describeRoute } from "./retro/synthesis";
+import type { Precursor, SynthesisPlan } from "./retro/synthesis";
 
 type RightTab = "inspect" | "chemistry" | "assistant" | "retro";
 const TABS: Array<[RightTab, string]> = [
@@ -101,6 +103,10 @@ export function App() {
   const [retroSelected, setRetroSelected] = useState<string | null>(null);
   const [reactionNotes, setReactionNotes] = useState<Record<string, ReactionRecord>>({});
   const [retroExported, setRetroExported] = useState(false);
+  const [plan, setPlan] = useState<SynthesisPlan | null>(null);
+  const [planning, setPlanning] = useState(false);
+  const [thread, setThread] = useState<QaEntry[]>([]);
+  const [asking, setAsking] = useState(false);
   const viewportRef = useRef<ViewportHandle>(null);
   const dragStartRef = useRef<Molecule | null>(null);
 
@@ -115,8 +121,17 @@ export function App() {
   const validation = useMemo(() => validateMolecule(molecule), [molecule]);
   const chemistry = useChemistry(engine, molecule);
   const report = useMemo(
-    () => RULE_ANALYSIS.analyze({ molecule, validation, engineValidation: chemistry.state.validation, properties: chemistry.state.properties }),
-    [molecule, validation, chemistry.state.validation, chemistry.state.properties],
+    () =>
+      RULE_ANALYSIS.analyze({
+        molecule,
+        validation,
+        engineValidation: chemistry.state.validation,
+        properties: chemistry.state.properties,
+        stereo: chemistry.state.stereo,
+        predictions: chemistry.state.predictions,
+        synthesis: plan ? (plan.routes[0] ? describeRoute(plan.routes[0]) : []) : null,
+      }),
+    [molecule, validation, chemistry.state.validation, chemistry.state.properties, chemistry.state.stereo, chemistry.state.predictions, plan],
   );
   const stereoLabels = useMemo(() => {
     const st = chemistry.state.stereo;
@@ -128,6 +143,7 @@ export function App() {
     return { atoms, bonds };
   }, [chemistry.state.stereo]);
   const retroService = useMemo(() => new MockRetrosynthesisService(chemistry.state.status === "ready" ? engine : null), [engine, chemistry.state.status]);
+  const planner = useMemo(() => new RuleBasedSynthesisPlanner(chemistry.state.status === "ready" ? (m: Molecule) => engine.toSmiles(m) : null), [engine, chemistry.state.status]);
 
   // Explanations and retro results describe a specific molecule; drop them when it changes.
   useEffect(() => {
@@ -138,6 +154,8 @@ export function App() {
     setRetroSelected(null);
     setReactionNotes({});
     setRetroExported(false);
+    setPlan(null);
+    setThread([]);
   }, [molecule]);
 
   // Candidates as shown: user notes attached, then the safety policy applied to every record.
@@ -173,6 +191,34 @@ export function App() {
       setExplaining(false);
     }
   }, [explainer, serverUrl, molecule, report]);
+
+  /** Ask one question; answered offline from the report or by the server explainer. */
+  const ask = useCallback(
+    async (question: string) => {
+      setAsking(true);
+      try {
+        const svc = explainer === "remote" ? new RemoteExplanationService(serverUrl, () => molecule) : templateExplainer;
+        const e = await svc.explain(report, question);
+        setThread((t) => [...t, { question, answer: e.text, source: e.source }]);
+      } catch (err) {
+        setThread((t) => [...t, { question, answer: err instanceof Error ? err.message : String(err), source: "error" }]);
+      } finally {
+        setAsking(false);
+      }
+    },
+    [explainer, serverUrl, molecule, report],
+  );
+
+  const runPlan = useCallback(async () => {
+    setPlanning(true);
+    try {
+      setPlan(await planner.plan(molecule));
+    } catch (e) {
+      setRetroError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPlanning(false);
+    }
+  }, [planner, molecule]);
 
   const runRetro = useCallback(async () => {
     setRetroWorking(true);
@@ -240,6 +286,37 @@ export function App() {
     setSelection(EMPTY_SELECTION);
     setPendingAtomId(null);
   }, []);
+
+  const openPrecursor = useCallback(
+    (p: Precursor) => {
+      const tidy = cleanupGeometry(p.molecule, { maxIterations: TIDY_ITERATIONS }).molecule;
+      loadMolecule({ ...tidy, name: p.name ?? p.smiles ?? p.formula }, `Opened precursor ${p.name ?? p.smiles ?? p.formula}`);
+      setMode("select");
+      setTab("chemistry");
+    },
+    [loadMolecule],
+  );
+
+  /** Any SMILES becomes a fragment: first atom = attachment point (must carry a hydrogen). */
+  const attachSmiles = useCallback(
+    async (smiles: string): Promise<string | null> => {
+      const anchor = selection.atoms[0];
+      if (!anchor) return "Select one atom first.";
+      try {
+        const r = await engine.fromSmiles(smiles, { addHydrogens: true, name: smiles });
+        const first = r.molecule.atoms.find((a) => a.element !== "H");
+        if (!first) return "The SMILES has no heavy atom.";
+        const hasH = r.molecule.bonds.some((b) => (b.atomA === first.id || b.atomB === first.id) && r.molecule.atoms.find((a) => a.id === (b.atomA === first.id ? b.atomB : b.atomA))?.element === "H");
+        if (!hasH) return `The first atom (${first.element}) has no hydrogen to replace; write the SMILES starting from an atom that has one.`;
+        const template: FragmentTemplate = { id: `smiles-${Date.now()}`, name: smiles, category: "group", smiles, attachAtomId: first.id, molecule: r.molecule };
+        run((m) => cmd.attachFragment(m, anchor, template));
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : String(e);
+      }
+    },
+    [engine, selection, run],
+  );
 
   const changeMode = useCallback((m: EditorMode) => {
     setMode(m);
@@ -399,7 +476,7 @@ export function App() {
         <div className="brand">
           <span className="brand-mark" aria-hidden="true" />
           <span className="brand-name">Molecular CAD</span>
-          <span className="brand-phase">prototype · phase 8</span>
+          <span className="brand-phase">prototype</span>
         </div>
         <div className="header-actions">
           <button type="button" className="btn btn-small" onClick={() => setDialog("import")} title="Import MCAD JSON, MOL, SDF or SMILES (Ctrl+O)">
@@ -472,6 +549,8 @@ export function App() {
           if (!anchor) return;
           run((m) => cmd.attachFragment(m, anchor, fragment));
         }}
+        onAttachSmiles={attachSmiles}
+        smilesReady={chemistry.state.status === "ready" && engine.capabilities.smiles}
       />
 
       <main className="viewport-area">
@@ -563,6 +642,9 @@ export function App() {
             onExplain={() => void explain()}
             onApplySuggestion={(s: Suggestion) => run((m) => applySuggestion(m, s))}
             serverAiEnabled={null}
+            thread={thread}
+            onAsk={(q) => void ask(q)}
+            asking={asking}
           />
         )}
         {tab === "retro" && (
@@ -586,6 +668,12 @@ export function App() {
             }}
             onExportJson={() => void exportRetroJson()}
             exported={retroExported}
+            plan={plan}
+            planning={planning}
+            plannerLabel={planner.label}
+            onPlan={() => void runPlan()}
+            onOpenPrecursor={openPrecursor}
+            onHighlightBonds={(bondIds) => setSelection({ atoms: [], bonds: bondIds.filter((id) => molecule.bonds.some((b) => b.id === id)) })}
           />
         )}
       </aside>

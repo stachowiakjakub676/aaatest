@@ -8,7 +8,7 @@
  * (as an ordinary undoable command).
  */
 import type { BondOrder, Molecule, ValidationResult } from "@molecular-cad/molecule-model";
-import type { ComputedProperties, EngineValidation } from "../chemistry/engine";
+import type { ComputedProperties, EngineValidation, Prediction, StereoInfo } from "../chemistry/engine";
 
 export type EditOperation =
   | { op: "setElement"; atomId: string; element: string }
@@ -64,7 +64,24 @@ export interface AnalysisReport {
   engineValidation: { valid: boolean; issues: string[] } | null;
   /** Rule evaluations on computed numbers (e.g. Lipinski's rule of five). Not predictions. */
   ruleChecks: RuleCheck[];
+  /** Deterministic observations about the structure (fragments, charges, stereo, flexibility). */
+  observations: string[];
+  /** Model estimates, each PREDICTED with its model, error statement and reasoning. */
+  estimates: EstimateSummary[];
+  /** Optional summary of the rule-based synthesis plan (class-level reaction names only). */
+  synthesis: string[] | null;
   suggestions: Suggestion[];
+}
+
+export interface EstimateSummary {
+  kind: "predicted";
+  id: string;
+  label: string;
+  value: number | string;
+  unit: string | null;
+  model: string;
+  uncertainty: string | null;
+  reasoning: string[];
 }
 
 export interface AnalysisInput {
@@ -72,6 +89,10 @@ export interface AnalysisInput {
   validation: ValidationResult;
   engineValidation: EngineValidation | null;
   properties: ComputedProperties | null;
+  stereo?: StereoInfo | null;
+  predictions?: Prediction[];
+  /** Forward steps of the best rule-based route, already rendered as sentences. */
+  synthesis?: string[] | null;
 }
 
 export interface MoleculeAnalysisService {
@@ -92,7 +113,8 @@ export interface Explanation {
 export interface ExplanationService {
   readonly id: string;
   readonly label: string;
-  explain(report: AnalysisReport): Promise<Explanation>;
+  /** Explain the whole report, or answer one question about it. */
+  explain(report: AnalysisReport, question?: string): Promise<Explanation>;
 }
 
 export const EXPLANATION_DISCLAIMER =

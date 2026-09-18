@@ -26,8 +26,14 @@ validation, rule checks). Rules:
 - Use only numbers that appear in the report. Never invent, estimate or "predict" values.
 - Say that descriptors are computed, not measured. Do not describe biological activity, toxicity
   or efficacy; rule checks such as Lipinski's rule of five are heuristics, say so.
-- Do not describe synthesis routes, reagents, reaction conditions or procedures.
-- Keep the explanation under 200 words, plain language, no headings.
+- The report may contain "estimates" (group-contribution or regression models such as Joback,
+  ESOL, QED) and "synthesis" (class-level reaction names from rule templates). Always call
+  estimates predicted and cite their model; you may explain the reasoning they carry (e.g. why an
+  OH raises the boiling point) but never add numbers of your own.
+- Never write procedures, quantities, temperatures, times or work-up instructions. Reaction
+  names and reagent classes that already appear in the report may be repeated as such.
+- If a question is given, answer it from the report; say plainly when the report lacks the data.
+- Keep the explanation under 250 words, plain language, no headings.
 - Optional suggestions must be structural edits the user might want, expressed only with these
   operations and only with atom/bond ids that appear in the report: setElement, setCharge,
   removeAtom, removeBond, setBondOrder, addBondedAtom, addHydrogens, tidy. Suggest nothing when
@@ -48,7 +54,7 @@ class ExplanationOut(BaseModel):
 class ExplanationProvider(Protocol):
     name: str
 
-    def explain(self, report: dict[str, Any]) -> ExplanationOut: ...
+    def explain(self, report: dict[str, Any], question: str | None = None) -> ExplanationOut: ...
 
 
 class AnthropicProvider:
@@ -61,12 +67,13 @@ class AnthropicProvider:
 
         self._client = anthropic.Anthropic()
 
-    def explain(self, report: dict[str, Any]) -> ExplanationOut:
+    def explain(self, report: dict[str, Any], question: str | None = None) -> ExplanationOut:
+        prompt = ("Question from the user: " + question + "\n\nAnswer it from this report:\n" if question else "Explain this report:\n") + json.dumps(report, ensure_ascii=False)
         response = self._client.messages.parse(
             model=MODEL_ID,
             max_tokens=4096,
             system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": "Explain this report:\n" + json.dumps(report, ensure_ascii=False)}],
+            messages=[{"role": "user", "content": prompt}],
             output_format=ExplanationOut,
         )
         if response.stop_reason == "refusal":
@@ -80,7 +87,7 @@ class AnthropicProvider:
 class DisabledProvider:
     name = "disabled"
 
-    def explain(self, report: dict[str, Any]) -> ExplanationOut:  # pragma: no cover - guarded by the endpoint
+    def explain(self, report: dict[str, Any], question: str | None = None) -> ExplanationOut:  # pragma: no cover - guarded by the endpoint
         raise RuntimeError("No AI provider configured. Set MCAD_AI_PROVIDER=anthropic and provide Anthropic credentials.")
 
 

@@ -190,7 +190,15 @@ step) and on demand (Tidy, 800 iterations). Real optimisation remains the engine
   implementation (`claude-opus-5`, `messages.parse` with a Pydantic schema, refusal handled) and a
   disabled default; the endpoint is 503 unless `MCAD_AI_PROVIDER=anthropic` is set. Tests use a fake
   provider. The system prompt forbids invented numbers, biological claims and synthesis details.
-- `PredictionService` stays a no-op placeholder; the UI labels PREDICTED separately from COMPUTED.
+- The report also carries `observations` (fragments, charges, stereo, flexibility, unusual
+  elements), `estimates` (every `Prediction` with its model, error and reasoning) and, when the
+  planner has run, `synthesis` (forward sentences of the best route). `answerQuestion()` in
+  `ai/explanation.ts` answers free-text questions offline by matching keyword intents (boiling,
+  melting, state, solubility, density, acid/base, lipophilicity, polarity, drug-likeness,
+  synthesis, stereo, groups, formula, validity, novelty; English and a few Polish stems) and
+  composing the answer from the report only. The server explainer accepts the same `question`
+  (`POST /ai/explain {report, question}`); the system prompt allows it to repeat reaction names
+  and reagent classes already in the report but never to add numbers, conditions or procedures.
 
 ## 4g. Retrosynthesis abstraction (phase 8)
 
@@ -227,11 +235,59 @@ step) and on demand (Tidy, 800 iterations). Real optimisation remains the engine
 - **Display styles**: `SceneStyle` presets (ball-and-stick, sticks, spacefill with Bondi vdW radii)
   plus `hideHydrogens`; the builder filters hidden atoms and skips bonds in spacefill. The graph is
   untouched, so measurements, formulas and undo history are unaffected.
-- **Estimates**: `chemistry/predictions.ts` implements ESOL (Delaney 2004) from cLogP, MW,
-  rotatable bonds and aromatic proportion (six-membered aromatic rings from perception) and merges
-  server estimates (`/estimates`: QED, SA score via RDKit contrib). Every `Prediction` carries
-  `kind: "predicted"`, model + citation and an uncertainty string; the UI keeps them in a separate
-  section from computed descriptors. Rule sets Lipinski, Veber and Egan are `RuleCheck`s.
+- **Estimates**: `chemistry/predictions.ts` assembles the PREDICTED block:
+  - Joback & Reid (1987) group contributions from `molecule-model/src/groupContribution.ts`:
+    the assigner maps every heavy atom to one of the 41 Joback groups (multi-atom groups −COOH,
+    −COO−, O=CH−, >C=O, −CN, −NO2 consume their heteroatoms; ring/aromatic variants by ring-bond
+    membership; explicit and implicit hydrogens both counted) and refuses molecules with an atom
+    outside the table rather than guessing. Normal boiling point, melting point, critical
+    constants, ΔHvap, ΔHf, ΔHfus and Cp(298) follow the published formulas (acetone reproduces
+    the textbook example to the last digit). The physical state at 25 °C is derived from Tb/Tm
+    with a ±20 K margin, the vapour pressure at 25 °C by Clausius–Clapeyron from Tb and ΔHvap.
+  - Girolami (1994) liquid/solid density from scaled atomic volumes with the hydroxyl / acid /
+    N–H / amide / sulfoxide / sulfone corrections.
+  - ESOL (Delaney 2004) solubility from cLogP, MW, rotatable bonds and aromatic proportion.
+  - Acid/base character from class-typical pKa ranges (carboxylic acid, phenol, aliphatic and
+    aniline-type amines, amide N, pyridine N, thiol, sulfonic acid, sulfonamide).
+  - Server estimates (`/estimates`: QED, SA score via RDKit contrib).
+  Every `Prediction` carries `kind: "predicted"`, a model with citation, an uncertainty string, a
+  `group` for the UI and, where the model is additive, a `breakdown` (group or regression terms
+  that sum to the value) plus `reasoning` sentences derived from the assigned groups (homologous
+  series +22.9 K per CH2, hydrogen-bonding OH +92.9 K, acid dimers, branching, halogen
+  polarisability, aromatic stacking…). The Chemistry tab shows a property sheet, then each
+  estimate with a "Why this value" disclosure. Rule sets Lipinski, Veber and Egan are `RuleCheck`s.
+- **Fragment library** now holds 131 templates in six categories (rings, heterocycles, groups,
+  alkyl, halogens, protecting groups), searchable by name or SMILES; any SMILES typed in the
+  toolbox becomes a fragment through the engine (`fromSmiles` with hydrogens, first atom =
+  attachment point), so the library is open-ended.
+
+## 4i. Rule-based synthesis planner
+
+- `retro/synthesis.ts`: `SynthesisPlanner.plan(target)` applies 30 retrosynthetic templates
+  written directly on the molecular graph (ester and amide disconnection, Williamson and thiolate
+  alkylation, reductive amination, Buchwald–Hartwig, Grignard addition and carboxylation,
+  carbonyl reduction / alcohol oxidation, acid from primary alcohol or nitrile, cyanide SN2,
+  Sandmeyer, Wittig, dehydration, alkynide alkylation, nitration, halogenation, sulfonation,
+  nitro reduction, Friedel–Crafts acylation/alkylation, Suzuki–Miyaura, sulfonamide formation,
+  aldol addition/condensation, halide from alcohol, epoxidation). Each template edits the graph
+  (cut, cap with H/OH/Br/Cl/NH2/=O/NO2/SO3H/B(OH)2, oxidise or reduce a carbinol) and every
+  precursor must pass `validateMolecule` or the move is dropped.
+- Search: depth-limited (3 steps) best-first recursion; at each node the top six moves (smallest
+  largest-precursor first, then reliability penalty) are expanded; a precursor is a leaf when its
+  canonical SMILES (stereo stripped, from the chemistry engine) is in the generated list of 248
+  common building blocks (`retro/buildingBlocks.ts`, from `apps/web/scripts/building_blocks.py`)
+  or it has ≤ 6 heavy atoms; unresolved precursors cost 3 + heavy atoms / 5 so routes that reach
+  real building blocks win. Cycles are blocked by the path set; a memo caches solved intermediates;
+  at most 160 nodes are expanded. The best three distinct routes are returned in forward order.
+- Output is `kind: "predicted"` with the model named ("rule templates v1"); a step carries only
+  the reaction class, reagent class, textbook reference and caveats (chemoselectivity notes such
+  as acidic protons vs Grignard reagents, SN2 substitution pattern, directing effects). No
+  conditions, amounts or procedures are generated, so the `ReactionRecord` provenance gate is not
+  bypassed; a `TargetScreener` that does not permit the target yields no route at all.
+- The Retro tab shows routes with precursors tagged as building block / small fragment /
+  intermediate / not resolved, an "open" button that loads any precursor into the editor, and
+  bond highlighting per step. The best route is also handed to the assistant report so questions
+  such as "how would I make it?" are answered from it.
 
 ## 5. Dependencies
 
@@ -300,11 +356,11 @@ surface minimal.
 
 | Suite                                   | Count | What it covers                                                        |
 | --------------------------------------- | ----- | --------------------------------------------------------------------- |
-| `packages/molecule-model` (vitest)      | 108   | periodic table, pure edit ops, conformers, validation rules, formula/weight, implicit H, JSON round trips and malformed input, vector maths, atom placement, MOL V2000 read/write, SDF and format detection, sketch clean-up (methane, ring closure, aromatic planarity, twisted double bond, 2D lifting, fixed atoms), perception (rings, cycles, functional groups), id-collision regression, transforms (mirror handedness, bond rotation dihedral, centre inversion) |
+| `packages/molecule-model` (vitest)      | 114   | periodic table, pure edit ops, conformers, validation rules, formula/weight, implicit H, JSON round trips and malformed input, vector maths, atom placement, MOL V2000 read/write, SDF and format detection, sketch clean-up (methane, ring closure, aromatic planarity, twisted double bond, 2D lifting, fixed atoms), perception (rings, cycles, functional groups), id-collision regression, transforms (mirror handedness, bond rotation dihedral, centre inversion), Joback group assignment and estimates (published acetone example, explicit vs implicit H, ring/aromatic and multi-atom groups, CH2 increment, refusal for uncovered atoms), Girolami density |
 | `packages/chem-core` (pytest)           | 12    | schema round trip, RDKit bridge round trip, aromatic handling, engine validation, computed properties, samples validity |
-| `apps/web` (vitest)                     | 56    | scene builder ↔ graph synchronisation, picking, selection, measurements, editor commands, undo/redo history, RDKit WASM engine (real wasm in node) incl. SMILES round trip, remote engine with a fake server, analysis report + rule suggestions, suggestion validation/application (incl. injected operations), template and remote explainers, mock retrosynthesis and provenance policy, fragment library validity and attachment, stereo via real RDKit WASM (mirror flips all labels, single-centre inversion, E/Z flip, unassigned centre), ESOL and composite predictions, rule sets |
-| `tests/e2e` (Playwright)                | 12    | built page in Chromium: open-ended building with ring closure and undo/redo, drag, RDKit properties and valence errors, SMILES/MOL/SDF/JSON import-export round trip, blocked invalid import, assistant suggestions/explanations, mock retro with reaction notes, visual smoke (pixel statistics + screenshot attachment), display styles and hidden hydrogens, stereo labels with mirror, building a new compound from fragments with estimates |
-| `services/api` (pytest)                 | 12    | health, validation errors with atom ids, computed properties, 409 on unsanitisable input, 422 on bad schema, optimisation, SMILES round trip with stereo, garbage SMILES, AI endpoint disabled by default and with a fake provider |
+| `apps/web` (vitest)                     | 65    | scene builder ↔ graph synchronisation, picking, selection, measurements, editor commands, undo/redo history, RDKit WASM engine (real wasm in node) incl. SMILES round trip, remote engine with a fake server, analysis report + rule suggestions, suggestion validation/application (incl. injected operations), template and remote explainers, mock retrosynthesis and provenance policy, fragment library validity and attachment, stereo via real RDKit WASM (mirror flips all labels, single-centre inversion, E/Z flip, unassigned centre), ESOL breakdown and composite predictions (Joback/Girolami/acid-base client-side, QED server-side, water refused by Joback), rule sets, assistant estimates/observations/question answering, question forwarding to the server explainer, synthesis planner with real RDKit WASM (one-step ester, multi-step routes, aromatic and coupling templates, screener, precursor validity for every template) |
+| `tests/e2e` (Playwright)                | 15    | built page in Chromium: open-ended building with ring closure and undo/redo, drag, RDKit properties and valence errors, SMILES/MOL/SDF/JSON import-export round trip, blocked invalid import, assistant suggestions/explanations, mock retro with reaction notes, visual smoke (pixel statistics + screenshot attachment), display styles and hidden hydrogens, stereo labels with mirror, building a new compound from fragments with estimates, property breakdowns with reasoning, assistant Q&A and the aspirin synthesis plan, fragment search and attach-from-SMILES |
+| `services/api` (pytest)                 | 13    | health, validation errors with atom ids, computed properties, 409 on unsanitisable input, 422 on bad schema, optimisation, SMILES round trip with stereo, garbage SMILES, AI endpoint disabled by default and with a fake provider (with and without a question), stereo and estimates |
 
 End-to-end checks of the built page (tap to add, attach, bond, undo/redo, inspector edits, delete,
 drag) are run with headless Chromium during development; a committed Playwright suite is planned

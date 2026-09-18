@@ -13,7 +13,19 @@ export interface AssistantPanelProps {
   onExplain(): void;
   onApplySuggestion(s: Suggestion): void;
   serverAiEnabled: boolean | null;
+  /** Question/answer thread about the current molecule (cleared when the molecule changes). */
+  thread: QaEntry[];
+  onAsk(question: string): void;
+  asking: boolean;
 }
+
+export interface QaEntry {
+  question: string;
+  answer: string;
+  source: string;
+}
+
+const EXAMPLE_QUESTIONS = ["Why is the boiling point what it is?", "Is it soluble in water?", "Is it acidic or basic?", "How would I make it?", "Is it drug-like?"];
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -27,6 +39,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 export function AssistantPanel(props: AssistantPanelProps) {
   const { report, explanation } = props;
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [question, setQuestion] = useState("");
   const suggestions = [...report.suggestions, ...(explanation?.suggestions ?? [])].filter((s) => !dismissed.has(s.id));
   const hasAtoms = report.molecule.atomCount > 0;
 
@@ -57,6 +70,61 @@ export function AssistantPanel(props: AssistantPanelProps) {
           </div>
         )}
       </section>
+
+      <section className="panel-section">
+        <h2 className="panel-title">Ask about this molecule</h2>
+        <form
+          className="custom-element"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const q = question.trim();
+            if (!q) return;
+            props.onAsk(q);
+            setQuestion("");
+          }}
+        >
+          <input id="assistant-question" className="input" value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="e.g. why is it soluble?" aria-label="Question" disabled={!hasAtoms || props.asking} />
+          <button id="btn-ask" type="submit" className="btn btn-small" disabled={!hasAtoms || props.asking || !question.trim()}>
+            {props.asking ? "…" : "Ask"}
+          </button>
+        </form>
+        <div className="chips">
+          {EXAMPLE_QUESTIONS.map((q) => (
+            <button key={q} type="button" className="chip" disabled={!hasAtoms || props.asking} onClick={() => props.onAsk(q)}>
+              {q}
+            </button>
+          ))}
+        </div>
+        {props.thread.length > 0 && (
+          <ul className="qa-thread">
+            {props.thread.map((entry, i) => (
+              <li key={i} className="qa-entry">
+                <p className="qa-question">{entry.question}</p>
+                {entry.answer.split("\n\n").map((para, j) => (
+                  <p key={j} className="qa-answer">
+                    {para}
+                  </p>
+                ))}
+                <p className="hint">Source: {entry.source}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="hint">Answers come from the structured report: computed descriptors, labelled estimates and the rule-based synthesis plan. The built-in answerer matches keywords; the server explainer sends the question and the report to the language model.</p>
+      </section>
+
+      {report.observations.length > 0 && (
+        <section className="panel-section">
+          <h2 className="panel-title">
+            Observations <span className="tag tag-computed">computed</span>
+          </h2>
+          <ul className="reasoning">
+            {report.observations.map((o, i) => (
+              <li key={i}>{o}</li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="panel-section">
         <h2 className="panel-title">

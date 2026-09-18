@@ -60,8 +60,8 @@ The client talks to chemistry through one `ChemistryEngine` interface with two i
 | RDKit in browser (WebAssembly)  | inside the page, offline (iPad OK) | yes | yes | no (no force fields in the WASM build) |
 | RDKit server (FastAPI)          | `services/api`        | yes      | yes        | MMFF94 / UFF, optional ETKDG re-embedding |
 
-Everything an engine returns is labelled **computed**. The Predictions section is a placeholder
-for phase 7 and states that no models are configured.
+Everything an engine returns is labelled **computed**. Estimates from published models are shown
+in a separate section labelled **predicted** (see below).
 
 The single-file build `apps/web/dist/molecular-cad.html` needs no server: open it in Safari on an
 iPad, in any desktop browser, or host it as a static page.
@@ -101,19 +101,27 @@ lifted into 3D on request.
 
 The editor is built for inventing structures, not browsing a catalogue:
 
-- **Fragment library** (toolbox): rings, functional groups, alkyls and halogens as RDKit-generated
-  3D templates. Select one atom and tap a fragment; one hydrogen on each side is replaced by the
-  new bond and the clean-up relaxes the join. Any of the 118 elements can still be placed by hand.
+- **Fragment library** (toolbox): 131 RDKit-generated 3D templates in six categories (rings,
+  heterocycles, functional groups, alkyls, halogens, protecting groups), searchable by name or
+  SMILES. Select one atom and tap a fragment; one hydrogen on each side is replaced by the new
+  bond and the clean-up relaxes the join. Any SMILES typed into the toolbox becomes a fragment
+  too (its first atom is the attachment point), and any of the 118 elements can be placed by hand.
 - **Stereochemistry**: CIP labels (R/S, E/Z) are perceived from the 3D coordinates by the chemistry
   engine and shown on the atom labels and in the inspector; unassigned centres are flagged.
   *Mirror* gives the enantiomer, *Invert* swaps two substituents of one centre, *Flip E/Z* and
   torsion rotation act on a selected bond. All are undoable commands on the graph.
 - **Display styles**: ball-and-stick, sticks, space-filling (van der Waals radii), hide hydrogens.
   Styles never touch the graph.
-- **Estimated properties** (Chemistry tab, marked PREDICTED): ESOL aqueous solubility (Delaney
-  2004) computed client-side from descriptors, plus QED drug-likeness and the SA synthetic
-  accessibility score from the server engine. Every item names its model and its known error.
-  Rule sets (Lipinski, Veber, Egan) are evaluated on computed descriptors and shown as rule checks.
+- **Estimated properties** (Chemistry tab, marked PREDICTED), all offline except the last:
+  boiling point, melting point, physical state at 25 °C, enthalpy of vaporisation and formation,
+  critical constants, heat capacity and vapour pressure from the Joback group-contribution
+  method; density (Girolami); aqueous solubility (ESOL, Delaney 2004); acid/base character from
+  class-typical pKa ranges; QED drug-likeness and synthetic accessibility from the server engine.
+  Every item names its model and its known error, and "Why this value" opens the breakdown (which
+  groups contribute how much) with reasoning in words, e.g. why each extra CH2 in an aldehyde
+  chain raises the boiling point by about 23 K while an OH adds 93 K. Molecules with atoms outside
+  the group table get "not available" instead of a guess. Rule sets (Lipinski, Veber, Egan) are
+  evaluated on computed descriptors and shown as rule checks.
 - **Is it new?** The InChIKey links to a PubChem search; no hit is a hint, not proof, of novelty.
 
 ## Assistant and retrosynthesis (phases 7–8)
@@ -128,10 +136,21 @@ The right panel has four tabs: **Inspect**, **Chemistry**, **Assistant**, **Retr
   model only ever sees the report and can only propose **suggestions** made of a closed set of
   edit operations; the client validates each against the live molecule and applies it only when
   you press *Apply* (one undoable step). Rule-based suggestions (add hydrogens, fix an over-valent
-  carbon, tidy) use the same path. `PredictionService` remains a placeholder: no models, no
-  predicted numbers.
-- **Retro.** `RetrosynthesisService` (`analyzeTarget`, `generateCandidates`, `rankCandidates`) is
-  a research abstraction. The bundled mock recognises functional groups, lists acyclic bonds that
+  carbon, tidy) use the same path. The report also carries the estimates (with their reasoning),
+  deterministic observations (separate fragments, charges, stereocentres, flexibility) and the
+  planned synthesis, so you can **ask questions** ("why is the boiling point high?", "is it
+  soluble?", "how would I make it?"): the built-in answerer matches the question to the report
+  offline and never invents numbers; the server explainer forwards the question to the language
+  model together with the report.
+- **Retro.** *Plan synthesis* runs a rule-based planner: about 30 textbook reaction templates
+  (esterification, amide coupling, Williamson, reductive amination, Grignard, Wittig, aldol,
+  Friedel–Crafts, Suzuki, nitration, oxidations and reductions, …) are applied backwards for up to
+  three steps until the precursors are common building blocks (a list of 248 canonical SMILES) or
+  small fragments. Up to three routes are shown in forward order with the reaction class, the
+  class of reagents, a textbook reference and caveats (for example acidic protons that would quench
+  a Grignard reagent); no conditions, amounts or procedures are generated. Any precursor can be
+  opened in the editor. `RetrosynthesisService` (`analyzeTarget`, `generateCandidates`,
+  `rankCandidates`) remains the research abstraction underneath. The bundled mock recognises functional groups, lists acyclic bonds that
   could conceptually be disconnected (ester, amide, ether, amine, α-carbonyl, generic C–C), shows
   the H-capped fragments with their SMILES, and ranks them with a fixed heuristic. Every candidate
   can carry a `ReactionRecord` (reagents with roles and amounts, conditions, yield, procedure)

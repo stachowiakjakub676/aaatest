@@ -3,7 +3,8 @@ import { createMolecule, getSampleMolecule, molecularFormula, validateMolecule }
 import type { Molecule } from "@molecular-cad/molecule-model";
 import { RULE_ANALYSIS, ruleSuggestions } from "../src/ai/analysis";
 import { applySuggestion, validateOperation, validateSuggestion } from "../src/ai/suggestions";
-import { RemoteExplanationService, TemplateExplanationService, renderTemplate } from "../src/ai/explanation";
+import { RemoteExplanationService, TemplateExplanationService, answerQuestion, renderTemplate } from "../src/ai/explanation";
+import { physicalPredictions, acidBasePrediction } from "../src/chemistry/predictions";
 import type { AnalysisInput } from "../src/ai/types";
 import { EXPLANATION_DISCLAIMER } from "../src/ai/types";
 import type { ComputedProperties } from "../src/chemistry/engine";
@@ -105,6 +106,69 @@ describe("suggestion validation and application", () => {
     expect(r.tidy).toBe(true);
     const stale = { ...s, operations: [{ op: "removeAtom" as const, atomId: "gone" }] };
     expect(() => applySuggestion(mol, stale)).toThrow(CommandError);
+  });
+});
+
+describe("assistant: estimates, observations and questions", () => {
+  const withEstimates = (mol: Molecule) => {
+    const base = input(mol);
+    return RULE_ANALYSIS.analyze({ ...base, predictions: [...physicalPredictions(mol, props), acidBasePrediction(mol)!], synthesis: ["Step 1: acetic acid + salicylic acid → aspirin via fischer esterification (acid catalyst)."] });
+  };
+
+  it("carries predicted estimates with reasoning into the report and the prose", () => {
+    const r = withEstimates(sample("aspirin"));
+    expect(r.estimates.every((e) => e.kind === "predicted" && e.model)).toBe(true);
+    const tb = r.estimates.find((e) => e.id === "joback-tb")!;
+    expect(tb.reasoning.length).toBeGreaterThan(0);
+    const text = renderTemplate(r);
+    expect(text).toMatch(/Predicted \(Joback group contributions, not measured\): boiling point about/);
+    expect(text).toMatch(/Simplest rule-based synthesis/);
+    expect(r.synthesis).toHaveLength(1);
+  });
+
+  it("makes deterministic observations about the structure", () => {
+    const two = createMolecule({
+      id: "two",
+      atoms: [
+        { id: "c1", element: "C", formalCharge: 0, position: { x: 0, y: 0, z: 0 } },
+        { id: "c2", element: "C", formalCharge: 0, position: { x: 5, y: 0, z: 0 } },
+        { id: "n", element: "N", formalCharge: 1, position: { x: 10, y: 0, z: 0 } },
+      ],
+    });
+    const obs = RULE_ANALYSIS.analyze(input(two, false)).observations;
+    expect(obs.some((o) => /3 separate fragments/.test(o))).toBe(true);
+    expect(obs.some((o) => /Net charge \+1/.test(o))).toBe(true);
+    const stereoObs = RULE_ANALYSIS.analyze({ ...input(sample("glucose"), false), stereo: { kind: "computed", source: "t", atoms: [{ atomId: "a1", label: "R" }, { atomId: "a2", label: "?" }], bonds: [] } }).observations;
+    expect(stereoObs.some((o) => /1 stereocentre with a defined configuration/.test(o))).toBe(true);
+    expect(stereoObs.some((o) => /flat or ambiguous/.test(o))).toBe(true);
+  });
+
+  it("answers questions from the report without inventing numbers", () => {
+    const r = withEstimates(sample("aspirin"));
+    const tb = r.estimates.find((e) => e.id === "joback-tb")!;
+    expect(answerQuestion(r, "Why is the boiling point so high?")).toContain(`about ${tb.value} °C`);
+    expect(answerQuestion(r, "is it soluble in water?")).toMatch(/log S|solubility estimate/);
+    expect(answerQuestion(r, "acidic or basic?")).toMatch(/Carboxylic acid: pKa/);
+    expect(answerQuestion(r, "how would I make it")).toMatch(/Step 1: acetic acid/);
+    expect(answerQuestion(r, "Czy jest rozpuszczalny w wodzie?")).toMatch(/log S|solubility estimate/);
+    expect(answerQuestion(r, "tell me about the weather")).toMatch(/I can answer from the report about/);
+    const noEstimates = RULE_ANALYSIS.analyze(input(sample("aspirin")));
+    expect(answerQuestion(noEstimates, "boiling point?")).toMatch(/no boiling-point estimate/i);
+    expect(answerQuestion(RULE_ANALYSIS.analyze(input(createMolecule({ id: "e" }), false)), "boiling?")).toMatch(/empty/);
+  });
+
+  it("routes questions through the explanation services", async () => {
+    const r = withEstimates(sample("aspirin"));
+    const t = await new TemplateExplanationService().explain(r, "is it acidic?");
+    expect(t.text).toMatch(/pKa/);
+    let sentBody = "";
+    const fetchImpl = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+      sentBody = String(init?.body);
+      return new Response(JSON.stringify({ text: "Yes.", model: "m", suggestions: [] }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const remote = new RemoteExplanationService("http://x", () => sample("aspirin"), fetchImpl);
+    await remote.explain(r, "is it acidic?");
+    expect(JSON.parse(sentBody).question).toBe("is it acidic?");
   });
 });
 

@@ -121,10 +121,21 @@ describe("predictions are labelled and separated from computed values", () => {
     expect(p.uncertainty).toMatch(/log unit/);
     expect(p.value).toBeGreaterThan(-4);
     expect(p.value).toBeLessThan(0);
+    expect(p.breakdown!.reduce((s, t) => s + t.contribution, 0)).toBeCloseTo(p.value as number, 1);
+    expect(p.reasoning!.length).toBeGreaterThan(1);
     const svc = new CompositePredictionService(engine, () => props);
     const items = await svc.predict(asp);
-    expect(items.map((i) => i.id)).toEqual(["esol-logs"]);
+    const ids = items.map((i) => i.id);
+    expect(ids).toEqual(expect.arrayContaining(["joback-tb", "joback-tm", "joback-state", "girolami-density", "esol-logs", "acid-base"]));
+    expect(ids).not.toContain("qed"); // server only
+    expect(items.every((i) => i.kind === "predicted" && i.model && i.group)).toBe(true);
     expect(svc.label).toMatch(/server engine/);
+    // Aspirin: carboxylic acid → acidic; Joback groups give a solid at room temperature (exp. m.p. 136 °C).
+    expect(items.find((i) => i.id === "acid-base")!.value).toMatch(/acidic \(carboxylic acid/);
+    expect(items.find((i) => i.id === "joback-state")!.value).toBe("solid");
+    const tb = items.find((i) => i.id === "joback-tb")!;
+    expect(tb.breakdown!.some((r) => r.label.includes("COOH"))).toBe(true);
+    expect(tb.reasoning!.some((r) => /dimer/.test(r))).toBe(true);
   }, 30000);
 
   it("collects server estimates through the remote engine", async () => {
@@ -136,7 +147,9 @@ describe("predictions are labelled and separated from computed values", () => {
       return new Response("{}", { status: 404 });
     }) as unknown as typeof fetch);
     const items = await new CompositePredictionService(eng, () => null).predict(water);
-    expect(items).toEqual([{ kind: "predicted", id: "qed", model: "QED", label: "Drug-likeness", value: 0.4 }]);
+    expect(items.find((i) => i.id === "qed")).toEqual({ kind: "predicted", group: "Drug-likeness (server)", id: "qed", model: "QED", label: "Drug-likeness", value: 0.4 });
+    // Water is outside the Joback table: the method says so instead of guessing.
+    expect(items.find((i) => i.id === "joback-na")!.value).toBe("not available");
     expect((await eng.stereo(water)).source).toBe("rdkit (server)");
   });
 

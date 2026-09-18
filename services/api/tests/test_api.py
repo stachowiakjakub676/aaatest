@@ -148,17 +148,19 @@ def test_ai_endpoint_with_fake_provider(monkeypatch):
     class Fake:
         name = "fake-model"
 
-        def explain(self, report):
+        def explain(self, report, question=None):
             assert report["molecule"]["name"] == "Water"
-            return ExplanationOut(text="Water is small.", suggestions=[SuggestionOut(title="Tidy", operations=[{"op": "tidy"}])])
+            return ExplanationOut(text=f"Water is small. Q={question}", suggestions=[SuggestionOut(title="Tidy", operations=[{"op": "tidy"}])])
 
     monkeypatch.setattr(main, "_provider", Fake())
     r = client.post("/ai/explain", json={"report": {"kind": "computed", "molecule": {"name": "Water"}}})
     assert r.status_code == 200
     body = r.json()
     assert body["model"] == "fake-model"
-    assert body["text"] == "Water is small."
+    assert body["text"] == "Water is small. Q=None"
     assert body["suggestions"][0]["operations"] == [{"op": "tidy"}]
+    asked = client.post("/ai/explain", json={"report": {"kind": "computed", "molecule": {"name": "Water"}}, "question": " why is it polar? "})
+    assert asked.json()["text"] == "Water is small. Q=why is it polar?"
     bad = client.post("/ai/explain", json={"report": {"kind": "predicted"}})
     assert bad.status_code == 422
 

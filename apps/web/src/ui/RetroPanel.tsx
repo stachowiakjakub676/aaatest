@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { DisconnectionCandidate, Provenance, ReactionRecord, Reagent, ReagentRole, TargetAnalysis } from "../retro/types";
 import { validateReactionRecord } from "../retro/types";
+import type { Precursor, SynthesisPlan, SynthesisRoute } from "../retro/synthesis";
 
 export interface RetroPanelProps {
   serviceLabel: string;
@@ -16,6 +17,70 @@ export interface RetroPanelProps {
   onSaveReaction(candidateId: string, record: ReactionRecord): void;
   onExportJson(): void;
   exported: boolean;
+  /** Rule-based synthesis planning. */
+  plan: SynthesisPlan | null;
+  planning: boolean;
+  plannerLabel: string;
+  onPlan(): void;
+  onOpenPrecursor(p: Precursor): void;
+  onHighlightBonds(bondIds: string[]): void;
+}
+
+function PrecursorChip({ p, onOpen }: { p: Precursor; onOpen(p: Precursor): void }) {
+  const tag = p.status === "building-block" ? "building block" : p.status === "small-fragment" ? "small fragment" : p.status === "unresolved" ? "not resolved" : "intermediate";
+  return (
+    <span className={`precursor ${p.status}`} title={`${p.formula} · ${tag}${p.name ? ` · ${p.name}` : ""}`}>
+      <span className="mono">{p.name ?? p.smiles ?? p.formula}</span>
+      <span className="precursor-tag">{tag}</span>
+      <button type="button" className="btn btn-tiny" onClick={() => onOpen(p)} title="Open this structure in the editor (replaces the current molecule; export it first if you want to keep it)">
+        open
+      </button>
+    </span>
+  );
+}
+
+function RouteView({ route, rank, onOpen, onHighlight }: { route: SynthesisRoute; rank: number; onOpen(p: Precursor): void; onHighlight(bondIds: string[]): void }) {
+  return (
+    <div className="route">
+      <div className="suggestion-head">
+        <strong>
+          Route {rank}: {route.stepCount} step{route.stepCount === 1 ? "" : "s"}
+        </strong>
+        <span className="tag tag-predicted mono">score {route.score}</span>
+      </div>
+      <ol className="route-steps">
+        {route.steps.map((st) => (
+          <li key={st.index} className="route-step" onClick={() => onHighlight(st.bondIds)} role="button" tabIndex={0}>
+            <div className="route-reaction">
+              <strong>{st.template.name}</strong> <span className="hint">({st.template.kind === "fgi" ? "functional-group change" : "bond formation"})</span>
+            </div>
+            <div className="route-line">
+              {st.reactants.map((p, i) => (
+                <span key={i}>
+                  {i > 0 && <span className="route-plus"> + </span>}
+                  <PrecursorChip p={p} onOpen={onOpen} />
+                </span>
+              ))}
+              {st.reagents.length > 0 && <span className="route-reagents mono"> [{st.reagents.join(", ")}]</span>}
+              <span className="route-arrow"> → </span>
+              <PrecursorChip p={st.product} onOpen={onOpen} />
+            </div>
+            <p className="hint">Reagent class: {st.template.reagentClass}. {st.template.reference}.</p>
+            {st.notes.map((n, i) => (
+              <p key={i} className="hint warn-text">
+                {n}
+              </p>
+            ))}
+          </li>
+        ))}
+      </ol>
+      {route.notes.map((n, i) => (
+        <p key={i} className="hint">
+          {n}
+        </p>
+      ))}
+    </div>
+  );
 }
 
 const ROLES: ReagentRole[] = ["reactant", "reagent", "catalyst", "solvent", "workup", "other"];
@@ -226,6 +291,32 @@ export function RetroPanel(props: RetroPanelProps) {
                 {n}
               </p>
             ))}
+          </>
+        )}
+      </section>
+
+      <section className="panel-section" id="synthesis">
+        <h2 className="panel-title">
+          Simplest synthesis <span className="tag tag-predicted">predicted</span>
+        </h2>
+        <p className="hint">Textbook reaction templates searched up to three steps back to common building blocks; each step names the reaction class and reagent class only. {props.plannerLabel}.</p>
+        <div className="button-row">
+          <button id="btn-plan" type="button" className="btn" onClick={props.onPlan} disabled={!props.hasAtoms || props.planning}>
+            {props.planning ? "Planning…" : "Plan synthesis"}
+          </button>
+        </div>
+        {props.plan && (
+          <>
+            {props.plan.notes.map((n, i) => (
+              <p key={i} className="hint">
+                {n}
+              </p>
+            ))}
+            {props.plan.reason && <p className="hint">{props.plan.reason}</p>}
+            {props.plan.routes.map((r, i) => (
+              <RouteView key={i} route={r} rank={i + 1} onOpen={props.onOpenPrecursor} onHighlight={props.onHighlightBonds} />
+            ))}
+            <p className="hint">{props.plan.disclaimer} Model: {props.plan.model}. Tap a step to highlight the bond it forms.</p>
           </>
         )}
       </section>

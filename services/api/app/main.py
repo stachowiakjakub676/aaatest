@@ -123,6 +123,8 @@ def to_smiles(req: MoleculeRequest) -> dict:
 
 class ExplainRequest(BaseModel):
     report: dict[str, Any]
+    #: Optional user question about the report (answered from the report only).
+    question: str | None = None
 
 
 @app.get("/ai/status")
@@ -139,8 +141,9 @@ def ai_explain(req: ExplainRequest) -> dict:
         raise HTTPException(status_code=503, detail="No AI provider configured on the server (set MCAD_AI_PROVIDER=anthropic).")
     if req.report.get("kind") != "computed":
         raise HTTPException(status_code=422, detail="report.kind must be 'computed' (only deterministic reports are explained).")
+    question = (req.question or "").strip()[:500] or None
     try:
-        out = provider.explain(req.report)
+        out = provider.explain(req.report, question)
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {"kind": "explanation", "model": provider.name, "text": out.text, "suggestions": [s.model_dump() for s in out.suggestions]}

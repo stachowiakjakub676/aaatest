@@ -124,6 +124,20 @@ export interface Prediction {
   unit?: string;
   /** Plain statement of the model's known error or scale. */
   uncertainty?: string;
+  /** UI grouping, e.g. "Physical (group contribution)", "Solubility", "Acid/base". */
+  group?: string;
+  /** How the number is composed: group contributions or regression terms that sum to the value. */
+  breakdown?: PredictionBreakdownRow[];
+  /** Structure-based reasoning: which features push the value up or down and why. */
+  reasoning?: string[];
+}
+
+export interface PredictionBreakdownRow {
+  label: string;
+  /** Number of occurrences (group methods). */
+  count?: number;
+  contribution: number;
+  unit: string;
 }
 
 export interface PredictionService {

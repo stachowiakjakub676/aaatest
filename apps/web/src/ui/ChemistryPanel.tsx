@@ -1,6 +1,17 @@
 import { useState } from "react";
 import type { ChemistryEngine } from "../chemistry/engine";
 import type { ChemistryState } from "../chemistry/useChemistry";
+import type { Prediction } from "../chemistry/engine";
+import { summarizePredictions } from "../chemistry/predictions";
+
+function groupPredictions(preds: Prediction[]): Array<[string, Prediction[]]> {
+  const groups = new Map<string, Prediction[]>();
+  for (const p of preds) {
+    const g = p.group ?? "Other";
+    groups.set(g, [...(groups.get(g) ?? []), p]);
+  }
+  return [...groups];
+}
 
 export type EngineChoice = "wasm" | "server";
 
@@ -143,28 +154,68 @@ export function ChemistryPanel(props: ChemistryPanelProps) {
         </section>
       )}
 
-      <section className="panel-section">
+      <section className="panel-section" id="estimates">
         <h2 className="panel-title">
           Estimated properties <span className="tag tag-predicted">predicted</span>
         </h2>
         {state.predictions.length === 0 && <p className="hint">{props.hasAtoms ? "No estimates yet (waiting for descriptors or the structure is rejected)." : "Add atoms to get estimates."}</p>}
-        <ul className="prediction-list">
-          {state.predictions.map((p) => (
-            <li key={p.id} className="prediction">
-              <div className="row">
-                <span className="row-label">{p.label}</span>
-                <span className="row-value mono">
-                  {typeof p.value === "number" ? fmtNumber(p.value) : p.value}
-                  {p.unit ? ` ${p.unit}` : ""}
-                </span>
-              </div>
-              <p className="hint">
-                {p.model}
-                {p.uncertainty ? `. ${p.uncertainty}.` : ""}
-              </p>
-            </li>
-          ))}
-        </ul>
+        {state.predictions.length > 0 && (
+          <div className="property-sheet">
+            {summarizePredictions(state.predictions).map((line, i) => (
+              <p key={i}>{line}</p>
+            ))}
+          </div>
+        )}
+        {groupPredictions(state.predictions).map(([group, items]) => (
+          <div key={group} className="prediction-group">
+            <h3 className="prediction-group-title">{group}</h3>
+            <ul className="prediction-list">
+              {items.map((p) => (
+                <li key={p.id} className="prediction">
+                  <div className="row">
+                    <span className="row-label">{p.label}</span>
+                    <span className="row-value mono">
+                      {String(p.value)}
+                      {p.unit ? ` ${p.unit}` : ""}
+                    </span>
+                  </div>
+                  {(p.breakdown || p.reasoning) && (
+                    <details className="prediction-details">
+                      <summary>Why this value</summary>
+                      {p.reasoning && (
+                        <ul className="reasoning">
+                          {p.reasoning.map((r, i) => (
+                            <li key={i}>{r}</li>
+                          ))}
+                        </ul>
+                      )}
+                      {p.breakdown && (
+                        <table className="breakdown">
+                          <tbody>
+                            {p.breakdown.map((row, i) => (
+                              <tr key={i}>
+                                <td>{row.label}</td>
+                                <td className="mono">{row.count !== undefined ? `×${row.count}` : ""}</td>
+                                <td className="mono">
+                                  {row.contribution >= 0 ? "+" : ""}
+                                  {fmtNumber(row.contribution)} {row.unit}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </details>
+                  )}
+                  <p className="hint">
+                    {p.model}
+                    {p.uncertainty ? `. ${p.uncertainty}.` : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
         <p className="hint">Model outputs, not measurements: each one names its model and its known error. {state.predictionSource}</p>
       </section>
 

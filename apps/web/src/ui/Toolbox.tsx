@@ -45,13 +45,19 @@ export interface ToolboxProps {
   /** Attach a library fragment to the selected atom (null when no single atom is selected). */
   selectedAtomId: string | null;
   onAttachFragment(fragment: FragmentTemplate): void;
+  /** Attach a fragment written as SMILES (first atom = attachment point). Resolves to an error message or null. */
+  onAttachSmiles(smiles: string): Promise<string | null>;
+  smilesReady: boolean;
 }
 
-const FRAGMENT_CATEGORIES: Array<[FragmentTemplate["category"], string]> = [
+const FRAGMENT_CATEGORIES: Array<[FragmentTemplate["category"] | "all", string]> = [
   ["ring", "Rings"],
+  ["hetero", "Heterocycles"],
   ["group", "Groups"],
   ["alkyl", "Alkyl"],
   ["halogen", "Halogens"],
+  ["protect", "Protecting"],
+  ["all", "All"],
 ];
 
 const ORDERS: Array<{ id: BondOrder; label: string }> = [
@@ -65,7 +71,13 @@ export function Toolbox(props: ToolboxProps) {
   const [custom, setCustom] = useState("");
   const [customError, setCustomError] = useState<string | null>(null);
   const [sampleId, setSampleId] = useState("");
-  const [fragmentCategory, setFragmentCategory] = useState<FragmentTemplate["category"]>("ring");
+  const [fragmentCategory, setFragmentCategory] = useState<FragmentTemplate["category"] | "all">("ring");
+  const [fragmentQuery, setFragmentQuery] = useState("");
+  const [smilesDraft, setSmilesDraft] = useState("");
+  const [smilesError, setSmilesError] = useState<string | null>(null);
+  const [attaching, setAttaching] = useState(false);
+  const query = fragmentQuery.trim().toLowerCase();
+  const visibleFragments = FRAGMENTS.filter((f) => (query ? f.name.toLowerCase().includes(query) || f.id.includes(query) || f.smiles.toLowerCase().includes(query) : f.category === fragmentCategory || fragmentCategory === "all"));
 
   const applyCustom = () => {
     const sym = custom.trim();
@@ -174,22 +186,50 @@ export function Toolbox(props: ToolboxProps) {
       </section>
 
       <section className="panel-section">
-        <h2 className="panel-title">Fragments</h2>
-        <div className="seg" role="radiogroup" aria-label="Fragment category">
-          {FRAGMENT_CATEGORIES.map(([id, label]) => (
-            <button key={id} type="button" role="radio" aria-checked={fragmentCategory === id} className={`seg-item ${fragmentCategory === id ? "active" : ""}`} onClick={() => setFragmentCategory(id)}>
-              {label}
-            </button>
-          ))}
-        </div>
+        <h2 className="panel-title">
+          Fragments <span className="muted mono">{FRAGMENTS.length}</span>
+        </h2>
+        <input id="fragment-search" className="input" placeholder="Search fragments (name or SMILES)" value={fragmentQuery} onChange={(e) => setFragmentQuery(e.target.value)} aria-label="Search fragments" autoCapitalize="off" autoCorrect="off" />
+        {!query && (
+          <div className="seg seg-wrap" role="radiogroup" aria-label="Fragment category">
+            {FRAGMENT_CATEGORIES.map(([id, label]) => (
+              <button key={id} type="button" role="radio" aria-checked={fragmentCategory === id} className={`seg-item ${fragmentCategory === id ? "active" : ""}`} onClick={() => setFragmentCategory(id)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="fragments">
-          {FRAGMENTS.filter((f) => f.category === fragmentCategory).map((f) => (
+          {visibleFragments.length === 0 && <p className="hint">No fragment matches.</p>}
+          {visibleFragments.map((f) => (
             <button key={f.id} id={`frag-${f.id}`} type="button" className="btn btn-small frag" disabled={!props.selectedAtomId} onClick={() => props.onAttachFragment(f)} title={props.selectedAtomId ? `Attach ${f.name} to the selected atom (replaces one hydrogen on each side)` : "Select one atom first (Select tool), then tap a fragment"}>
               {f.name}
             </button>
           ))}
         </div>
         <p className="hint">{props.selectedAtomId ? `Tapping a fragment attaches it to atom ${props.selectedAtomId}.` : "Select a single atom to attach fragments to it. Built with RDKit 3D templates; auto-tidy relaxes the join."}</p>
+        <form
+          className="custom-element"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const smi = smilesDraft.trim();
+            if (!smi || !props.selectedAtomId) return;
+            setAttaching(true);
+            setSmilesError(null);
+            void props.onAttachSmiles(smi).then((err) => {
+              setSmilesError(err);
+              if (!err) setSmilesDraft("");
+              setAttaching(false);
+            });
+          }}
+        >
+          <input id="fragment-smiles" className="input mono" placeholder="Any fragment as SMILES, e.g. C(=O)NC" value={smilesDraft} onChange={(e) => setSmilesDraft(e.target.value)} aria-label="Fragment SMILES" autoCapitalize="off" autoCorrect="off" disabled={!props.smilesReady} />
+          <button id="btn-attach-smiles" type="submit" className="btn btn-small" disabled={!props.selectedAtomId || !props.smilesReady || attaching || !smilesDraft.trim()}>
+            {attaching ? "…" : "Attach"}
+          </button>
+        </form>
+        {smilesError && <p className="hint error-text">{smilesError}</p>}
+        <p className="hint">Write the SMILES so that its first atom is the one that bonds to the selected atom (it must carry a hydrogen). Any group you can write becomes a fragment.</p>
       </section>
 
       <section className="panel-section">
