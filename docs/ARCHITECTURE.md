@@ -1,6 +1,6 @@
 # Molecular CAD — architecture and phase 0 analysis
 
-_Last updated after phase 2 (3D viewer). Keep this file in sync with the code._
+_Last updated after phase 3 (editor). Keep this file in sync with the code._
 
 ## 1. Repository and environment (phase 0 findings)
 
@@ -89,6 +89,27 @@ result is flagged `approximate` when an isotope label or a mass-number-only elem
   rendering (no animation loop, battery-friendly on tablets), orientation gizmo, theme-aware background.
 - `sceneBuilder` is DOM-free and unit-tested in node (mesh counts, id tagging, geometry, selection).
 
+## 4b. Editor (phase 3)
+
+- **Commands** (`apps/web/src/editor/commands.ts`) are pure functions `Molecule -> { molecule, label, selection? }`
+  composed from the domain operations: add free / bonded atom, bond two atoms, change or cycle
+  bond order, delete atom / bond / selection, set element, set formal charge, move atom, add or
+  remove hydrogens. They throw `CommandError` for impossible requests and never touch the renderer.
+- **History** (`editor/history.ts`) is an immutable past/present/future stack of molecule
+  snapshots (structural sharing makes snapshots cheap). Drags update the present without recording
+  and are committed as one step on release.
+- **Placement** (`molecule-model/src/placement.ts`) puts a new atom at the ideal bond length
+  (sum of covalent radii, shortened for multiple bonds) in an idealised direction chosen from the
+  anchor's existing bonds: tetrahedral by default, trigonal when a double/aromatic bond is present,
+  linear for triple bonds. It is a sketching heuristic; geometry optimisation stays an explicit
+  engine action (phase 4).
+- **Tool modes** (select, add, bond, move, delete) live in the UI only. The viewport reports taps
+  (with the world point on the plane through the orbit target) and atom drags; `App` maps them to
+  commands depending on the mode. The camera re-frames only when a different molecule is loaded or
+  the first atom appears, never on ordinary edits.
+- Over-valent or otherwise inconsistent intermediate states are allowed and reported by the
+  validator, so the user can build freely and fix afterwards.
+
 ## 5. Dependencies
 
 | Dependency                | Version    | Role                                   | Maintenance check (2026-09)                        |
@@ -141,8 +162,8 @@ surface minimal.
 | 0     | Analysis, architecture, dependencies, risks                           | done   |
 | 1     | Domain model, validation, formula, serialization, tests (TS + Python) | done   |
 | 2     | 3D viewer: orbit/zoom/pan, picking, labels, bond orders, fit/reset    | done   |
-| 3     | Editor: add/delete atom & bond, bond order, move atom, undo/redo      | next   |
-| 4     | ChemistryEngine interface, FastAPI service, RDKit WASM adapter, property panel (computed vs predicted) | |
+| 3     | Editor: add/delete atom & bond, bond order, move atom, undo/redo, H fill | done   |
+| 4     | ChemistryEngine interface, FastAPI service, RDKit WASM adapter, property panel (computed vs predicted), geometry optimisation | next |
 | 5     | SMILES / MOL / SDF import & export with validation and round-trip tests | |
 | 6     | UX polish: tool modes, touch drawer, keyboard map, change log          | |
 | 7     | AI layer interfaces (analysis / prediction / explanation), suggestions require confirmation | |
@@ -154,6 +175,10 @@ surface minimal.
 
 | Suite                                   | Count | What it covers                                                        |
 | --------------------------------------- | ----- | --------------------------------------------------------------------- |
-| `packages/molecule-model` (vitest)      | 67    | periodic table, pure edit ops, conformers, validation rules, formula/weight, implicit H, JSON round trips and malformed input |
+| `packages/molecule-model` (vitest)      | 74    | periodic table, pure edit ops, conformers, validation rules, formula/weight, implicit H, JSON round trips and malformed input, vector maths and atom placement |
 | `packages/chem-core` (pytest)           | 12    | schema round trip, RDKit bridge round trip, aromatic handling, engine validation, computed properties, samples validity |
-| `apps/web` (vitest)                     | 12    | scene builder ↔ graph synchronisation, picking data, selection state, bounding sphere, measurements |
+| `apps/web` (vitest)                     | 23    | scene builder ↔ graph synchronisation, picking data, selection state, bounding sphere, measurements, editor commands (open-ended building, bonds, hydrogens), undo/redo history |
+
+End-to-end checks of the built page (tap to add, attach, bond, undo/redo, inspector edits, delete,
+drag) are run with headless Chromium during development; a committed Playwright suite is planned
+for phase 9.

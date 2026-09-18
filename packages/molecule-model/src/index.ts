@@ -5,3 +5,5 @@ export * from "./validation";
 export * from "./formula";
 export * from "./serialization";
 export * from "./samples";
+export * from "./vec3";
+export * from "./placement";

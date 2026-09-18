@@ -4,9 +4,13 @@ A desktop-first, cross-platform application that treats molecular structures the
 treats mechanical parts: an interactive 3D viewport, a deterministic molecular graph as the single
 source of truth, and computed properties from established cheminformatics libraries.
 
-**Status: prototype, phases 0–2 complete** (analysis, domain model, 3D viewer). See
+**Status: prototype, phases 0–3 complete** (analysis, domain model, 3D viewer, editor). See
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the architecture, dependency choices, risks and
-the roadmap. Editing (phase 3), the chemistry API (phase 4) and import/export (phase 5) are next.
+the roadmap. The chemistry engine/API (phase 4) and import/export (phase 5) are next.
+
+The editor is open-ended: start from an empty canvas, place any of the 118 elements, grow
+structures atom by atom without limit, bond, re-order, move, delete, undo and redo. The built-in
+sample molecules are optional starting points, not a catalogue.
 
 ## Layout
 
@@ -40,17 +44,22 @@ uv venv && uv pip install -e ".[dev]"
 The single-file build `apps/web/dist/molecular-cad.html` needs no server: open it in Safari on an
 iPad, in any desktop browser, or host it as a static page.
 
-## Viewer controls
+## Controls
 
-| Action            | Mouse / keyboard              | Touch (iPad)               |
-| ----------------- | ----------------------------- | -------------------------- |
-| Rotate            | left drag                     | one-finger drag            |
-| Zoom              | wheel / middle drag           | pinch                      |
-| Pan               | right drag                    | two-finger drag            |
-| Select atom/bond  | click, Shift+click adds       | tap, "Add to selection"    |
-| Fit / reset / labels / clear | F / R / L / Esc    | Toolbox buttons            |
+| Action                    | Mouse / keyboard                     | Touch (iPad)               |
+| ------------------------- | ------------------------------------ | -------------------------- |
+| Rotate / zoom / pan       | left drag / wheel / right drag       | one finger / pinch / two fingers |
+| Tool                      | S select · A add atom · B bond · M move · X delete | Toolbox buttons |
+| Add atom (tool A)         | click empty space = free atom; click an atom = attach to it | tap |
+| Bond (tool B)             | click two atoms; click a bond to set its order | tap |
+| Move (tool M)             | drag an atom in the screen plane     | drag                       |
+| Delete (tool X)           | click atom or bond; Delete key removes the selection | tap |
+| Undo / redo               | Ctrl+Z / Ctrl+Shift+Z (⌘ on Mac)     | Toolbox buttons            |
+| Select                    | click, Shift+click adds              | tap, "Add to selection"    |
+| Fit / reset / labels / clear | F / R / L / Esc                   | Toolbox buttons            |
 
-Selecting two atoms shows their distance, three atoms the angle at the middle one.
+Selecting two atoms shows their distance, three atoms the angle at the middle one. The inspector
+edits the selected atom's element and formal charge and the selected bond's order.
 
 ## Principles
 

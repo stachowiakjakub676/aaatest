@@ -48,10 +48,14 @@ const CYLINDER = new THREE.CylinderGeometry(1, 1, 1, 18, 1, false);
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
 export const SELECTION_COLOR = 0xffb454;
+/** Colour for the "first atom picked" state of the bond tool. */
+export const PENDING_COLOR = 0x4fb3bf;
+
+export type Highlight = boolean | "pending";
 
 const materialCache = new Map<string, THREE.MeshStandardMaterial>();
-export function materialFor(color: number, selected: boolean, opacity = 1): THREE.MeshStandardMaterial {
-  const key = `${color}:${selected ? 1 : 0}:${opacity}`;
+export function materialFor(color: number, selected: Highlight, opacity = 1): THREE.MeshStandardMaterial {
+  const key = `${color}:${selected === "pending" ? 2 : selected ? 1 : 0}:${opacity}`;
   let m = materialCache.get(key);
   if (!m) {
     m = new THREE.MeshStandardMaterial({
@@ -62,7 +66,7 @@ export function materialFor(color: number, selected: boolean, opacity = 1): THRE
       opacity,
     });
     if (selected) {
-      m.emissive = new THREE.Color(SELECTION_COLOR);
+      m.emissive = new THREE.Color(selected === "pending" ? PENDING_COLOR : SELECTION_COLOR);
       m.emissiveIntensity = 0.55;
     }
     materialCache.set(key, m);
@@ -192,11 +196,17 @@ export function labelText(element: string, charge: number, isotope?: number): st
 }
 
 /** Swap materials so selected atoms/bonds glow. Cheap enough to run on every selection change. */
-export function applySelection(objects: MoleculeSceneObjects, selectedAtoms: Iterable<AtomId>, selectedBonds: Iterable<BondId>): void {
+export function applySelection(
+  objects: MoleculeSceneObjects,
+  selectedAtoms: Iterable<AtomId>,
+  selectedBonds: Iterable<BondId>,
+  pendingAtoms: Iterable<AtomId> = [],
+): void {
   const atomSet = new Set(selectedAtoms);
   const bondSet = new Set(selectedBonds);
+  const pendingSet = new Set(pendingAtoms);
   for (const [id, mesh] of objects.atomMeshes) {
-    mesh.material = materialFor(mesh.userData.color as number, atomSet.has(id));
+    mesh.material = materialFor(mesh.userData.color as number, atomSet.has(id) ? true : pendingSet.has(id) ? "pending" : false);
   }
   for (const [id, segments] of objects.bondSegments) {
     for (const seg of segments) {

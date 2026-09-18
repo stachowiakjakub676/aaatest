@@ -460,21 +460,30 @@ kbd {
   }
 }
 @media (max-width: 560px) {
+  html,
+  body,
+  #root {
+    height: auto;
+    min-height: 100%;
+  }
   .app {
+    height: auto;
+    min-height: 100%;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 40px minmax(220px, 45vh) minmax(0, 1fr) 30px;
+    grid-template-rows: 40px 60vh auto auto 30px;
     grid-template-areas:
       "header"
       "viewport"
-      "panels"
+      "toolbox"
+      "inspector"
       "status";
   }
-  .toolbox,
-  .inspector {
-    grid-area: panels;
+  .panel {
+    overflow: visible;
   }
-  .toolbox {
-    display: none; /* on phones the inspector wins; the toolbox needs a drawer in a later phase */
+  .statusbar {
+    position: sticky;
+    bottom: 0;
   }
   .header-molecule {
     font-size: 11px;
@@ -487,4 +496,175 @@ kbd {
   * {
     transition: none !important;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Editor controls (phase 3)
+   --------------------------------------------------------------------------- */
+.tool-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.tool {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 8px 6px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--panel-2);
+  cursor: pointer;
+  text-align: left;
+}
+.tool.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+.tool.active kbd {
+  color: var(--accent-ink);
+  border-color: color-mix(in srgb, var(--accent-ink) 40%, transparent);
+}
+.tool:hover:not(.active) {
+  border-color: var(--accent);
+}
+.current-element {
+  margin-left: auto;
+  font-size: 15px;
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.elements {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
+}
+.el {
+  min-height: 34px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--panel-2);
+  cursor: pointer;
+  position: relative;
+  font-size: 13px;
+}
+.el::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--el, #999);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.el.active {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--accent);
+}
+.custom-element {
+  display: flex;
+  gap: 6px;
+}
+.input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--panel-2);
+  color: var(--text);
+}
+.btn-small {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 4px 10px;
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.btn:disabled:hover {
+  border-color: var(--border-strong);
+}
+.btn-danger {
+  border-color: color-mix(in srgb, var(--err) 60%, var(--border-strong));
+  color: var(--err);
+}
+.btn-danger:active {
+  background: var(--err);
+  color: #fff;
+}
+.error-text {
+  color: var(--err);
+}
+.seg {
+  display: flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.seg-item {
+  flex: 1;
+  min-height: 32px;
+  border: 0;
+  border-right: 1px solid var(--border-strong);
+  background: var(--panel-2);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.seg-item:last-child {
+  border-right: 0;
+}
+.seg-item.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.status-chip.mode {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.viewport-empty {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 320px;
+  padding: 14px 18px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: center;
+  pointer-events: none;
+}
+.viewport-empty strong {
+  color: var(--text);
+}
+.viewport.mode-add .viewport-canvas {
+  cursor: cell;
+}
+.viewport.mode-delete .viewport-canvas {
+  cursor: not-allowed;
+}
+.viewport.mode-move .viewport-canvas {
+  cursor: move;
+}
+.viewport.mode-bond .viewport-canvas {
+  cursor: alias;
 }

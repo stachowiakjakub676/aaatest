@@ -1,4 +1,5 @@
 import {
+  ELEMENTS,
   bondOrderValue,
   bondsOfAtom,
   chargeLabel,
@@ -12,11 +13,20 @@ import {
   molecularWeight,
   totalFormalCharge,
 } from "@molecular-cad/molecule-model";
-import type { Molecule, ValidationResult } from "@molecular-cad/molecule-model";
+import type { BondOrder, Molecule, ValidationResult } from "@molecular-cad/molecule-model";
 import type { Selection } from "../state/selection";
 import { measureSelection } from "../state/measure";
 
-export interface InspectorProps {
+export interface InspectorActions {
+  onSetElement(atomId: string, element: string): void;
+  onSetCharge(atomId: string, charge: number): void;
+  onDeleteAtom(atomId: string): void;
+  onAddHydrogens(atomId: string): void;
+  onSetBondOrder(bondId: string, order: BondOrder): void;
+  onDeleteBond(bondId: string): void;
+}
+
+export interface InspectorProps extends InspectorActions {
   molecule: Molecule;
   selection: Selection;
   validation: ValidationResult;
@@ -31,15 +41,16 @@ function Row({ label, value, mono = true }: { label: string; value: React.ReactN
   );
 }
 
-function fmt(n: number): string {
-  return n.toFixed(3);
-}
+const fmt = (n: number) => n.toFixed(3);
+const ORDERS: BondOrder[] = ["single", "double", "triple", "aromatic"];
 
-export function Inspector({ molecule, selection, validation }: InspectorProps) {
+export function Inspector(props: InspectorProps) {
+  const { molecule, selection, validation } = props;
   const mw = molecularWeight(molecule);
   const errors = validation.issues.filter((i) => i.severity === "error").length;
   const warnings = validation.issues.length - errors;
   const measurement = measureSelection(molecule, selection.atoms);
+  const single = selection.atoms.length === 1 && selection.bonds.length === 0 ? "atom" : selection.bonds.length === 1 && selection.atoms.length === 0 ? "bond" : selection.atoms.length + selection.bonds.length === 0 ? "none" : "multi";
 
   return (
     <aside className="panel inspector" aria-label="Inspector">
@@ -47,10 +58,10 @@ export function Inspector({ molecule, selection, validation }: InspectorProps) {
         <h2 className="panel-title">
           Molecule <span className="tag tag-computed">computed</span>
         </h2>
-        <Row label="Formula" value={molecularFormula(molecule)} />
-        <Row label="Mol. weight" value={mw.value !== undefined ? `${mw.value.toFixed(3)} g/mol${mw.approximate ? " (approx.)" : ""}` : "n/a"} />
-        <Row label="Atoms" value={molecule.atoms.length} />
-        <Row label="Bonds" value={molecule.bonds.length} />
+        <Row label="Formula (explicit)" value={molecule.atoms.length ? molecularFormula(molecule) : "—"} />
+        <Row label="Formula (with implicit H)" value={molecule.atoms.length ? molecularFormula(molecule, { includeImplicitHydrogens: true }) : "—"} />
+        <Row label="Mol. weight" value={mw.value !== undefined && molecule.atoms.length ? `${mw.value.toFixed(3)} g/mol${mw.approximate ? " (approx.)" : ""}` : "—"} />
+        <Row label="Atoms / bonds" value={`${molecule.atoms.length} / ${molecule.bonds.length}`} />
         <Row label="Net charge" value={totalFormalCharge(molecule)} />
         <Row
           label="Structure"
@@ -65,20 +76,17 @@ export function Inspector({ molecule, selection, validation }: InspectorProps) {
             )
           }
         />
-        <p className="hint">Values follow deterministically from the explicit atoms and bonds. No predictions are shown in this phase.</p>
+        <p className="hint">Values follow deterministically from the explicit atoms and bonds. Mol. weight counts explicit atoms only.</p>
       </section>
 
       <section className="panel-section">
         <h2 className="panel-title">Selection</h2>
-        {selection.atoms.length === 0 && selection.bonds.length === 0 && <p className="hint">Nothing selected. Tap an atom or a bond in the viewport.</p>}
-
-        {selection.atoms.length === 1 && <AtomDetails molecule={molecule} atomId={selection.atoms[0]!} />}
-        {selection.bonds.length === 1 && selection.atoms.length === 0 && <BondDetails molecule={molecule} bondId={selection.bonds[0]!} />}
-
-        {(selection.atoms.length > 1 || selection.bonds.length > 1 || (selection.atoms.length > 0 && selection.bonds.length > 0)) && (
+        {single === "none" && <p className="hint">Nothing selected. Use the Select tool and tap an atom or a bond.</p>}
+        {single === "atom" && <AtomDetails {...props} atomId={selection.atoms[0]!} />}
+        {single === "bond" && <BondDetails {...props} bondId={selection.bonds[0]!} />}
+        {single === "multi" && (
           <>
-            <Row label="Atoms" value={selection.atoms.length} />
-            <Row label="Bonds" value={selection.bonds.length} />
+            <Row label="Atoms / bonds" value={`${selection.atoms.length} / ${selection.bonds.length}`} />
             <ul className="id-list">
               {selection.atoms.map((id) => (
                 <li key={`a-${id}`} className="mono">
@@ -93,7 +101,6 @@ export function Inspector({ molecule, selection, validation }: InspectorProps) {
             </ul>
           </>
         )}
-
         {measurement && (
           <div className="measurement">
             <span className="row-label">{measurement.label}</span>
@@ -119,20 +126,42 @@ export function Inspector({ molecule, selection, validation }: InspectorProps) {
   );
 }
 
-function AtomDetails({ molecule, atomId }: { molecule: Molecule; atomId: string }) {
+function AtomDetails({ molecule, atomId, onSetElement, onSetCharge, onDeleteAtom, onAddHydrogens }: InspectorProps & { atomId: string }) {
   const atom = getAtom(molecule, atomId);
   if (!atom) return null;
   const el = getElement(atom.element);
   const bonds = bondsOfAtom(molecule, atomId);
+  const implicitH = implicitHydrogenCount(molecule, atomId);
   return (
     <>
       <Row label="Atom" value={`${atom.element}${chargeLabel(atom.formalCharge)} · ${atom.id}`} />
-      <Row label="Element" value={el ? `${el.name} (Z=${el.atomicNumber})` : "unknown"} mono={false} />
-      <Row label="Formal charge" value={atom.formalCharge} />
+      <label className="field">
+        <span className="field-label">Element</span>
+        <select id="inspector-element" className="select mono" value={atom.element} onChange={(e) => onSetElement(atomId, e.target.value)}>
+          {ELEMENTS.map((e) => (
+            <option key={e.symbol} value={e.symbol}>
+              {e.symbol} · {e.name} ({e.atomicNumber})
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="row">
+        <span className="row-label">Formal charge</span>
+        <span className="stepper">
+          <button type="button" className="btn btn-small" onClick={() => onSetCharge(atomId, atom.formalCharge - 1)} aria-label="Decrease charge">
+            −
+          </button>
+          <span className="mono">{atom.formalCharge > 0 ? `+${atom.formalCharge}` : atom.formalCharge}</span>
+          <button type="button" className="btn btn-small" onClick={() => onSetCharge(atomId, atom.formalCharge + 1)} aria-label="Increase charge">
+            +
+          </button>
+        </span>
+      </div>
+      <Row label="Element name" value={el ? `${el.name} (Z=${el.atomicNumber})` : "unknown"} mono={false} />
       {atom.isotope !== undefined && <Row label="Isotope" value={atom.isotope} />}
       <Row label="Position (Å)" value={`${fmt(atom.position.x)}, ${fmt(atom.position.y)}, ${fmt(atom.position.z)}`} />
       <Row label="Explicit valence" value={explicitValence(molecule, atomId)} />
-      <Row label="Implicit H" value={implicitHydrogenCount(molecule, atomId)} />
+      <Row label="Implicit H" value={implicitH} />
       <Row
         label="Bonds"
         value={
@@ -146,11 +175,19 @@ function AtomDetails({ molecule, atomId }: { molecule: Molecule; atomId: string 
                 .join(", ")
         }
       />
+      <div className="button-row">
+        <button type="button" className="btn" onClick={() => onAddHydrogens(atomId)} disabled={implicitH === 0} title="Add explicit hydrogens to this atom">
+          Add {implicitH || ""} H
+        </button>
+        <button type="button" className="btn btn-danger" onClick={() => onDeleteAtom(atomId)}>
+          Delete atom
+        </button>
+      </div>
     </>
   );
 }
 
-function BondDetails({ molecule, bondId }: { molecule: Molecule; bondId: string }) {
+function BondDetails({ molecule, bondId, onSetBondOrder, onDeleteBond }: InspectorProps & { bondId: string }) {
   const bond = getBond(molecule, bondId);
   if (!bond) return null;
   const a = getAtom(molecule, bond.atomA);
@@ -159,9 +196,21 @@ function BondDetails({ molecule, bondId }: { molecule: Molecule; bondId: string 
     <>
       <Row label="Bond" value={bond.id} />
       <Row label="Atoms" value={`${a?.element ?? "?"}${bond.atomA} — ${b?.element ?? "?"}${bond.atomB}`} />
-      <Row label="Order" value={`${bond.order} (${bondOrderValue(bond.order)})`} />
+      <div className="field">
+        <span className="field-label">Order (value {bondOrderValue(bond.order)})</span>
+        <div className="seg" role="radiogroup" aria-label="Bond order">
+          {ORDERS.map((o) => (
+            <button key={o} type="button" role="radio" aria-checked={bond.order === o} className={`seg-item ${bond.order === o ? "active" : ""}`} onClick={() => onSetBondOrder(bondId, o)}>
+              {o}
+            </button>
+          ))}
+        </div>
+      </div>
       {bond.stereo && <Row label="Stereo" value={bond.stereo} />}
       {a && b && <Row label="Length" value={`${distance(a.position, b.position).toFixed(3)} Å`} />}
+      <button type="button" className="btn btn-danger btn-block" onClick={() => onDeleteBond(bondId)}>
+        Delete bond
+      </button>
     </>
   );
 }
