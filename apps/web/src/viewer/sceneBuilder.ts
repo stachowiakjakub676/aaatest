@@ -5,24 +5,58 @@
  * the atom/bond id it represents, and the scene is rebuilt whenever the molecule changes.
  */
 import * as THREE from "three";
-import { bondOrderValue, covalentRadius, elementColor, neighborsOf } from "@molecular-cad/molecule-model";
+import { bondOrderValue, covalentRadius, elementColor, neighborsOf, vdwRadius } from "@molecular-cad/molecule-model";
 import type { AtomId, Bond, BondId, Molecule, Vec3 } from "@molecular-cad/molecule-model";
 
 export interface SceneStyle {
-  /** Multiplier applied to the covalent radius for the atom sphere. */
+  id: "ball-and-stick" | "sticks" | "spacefill";
+  /** Multiplier applied to the covalent (or van der Waals, for spacefill) radius for the atom sphere. */
   atomRadiusScale: number;
   minAtomRadius: number;
   bondRadius: number;
   /** Centre-to-centre spacing between the cylinders of a multiple bond (Å). */
   multiBondOffset: number;
+  /** Spacefill: spheres use van der Waals radii and bonds are not drawn. */
+  useVdw: boolean;
+  drawBonds: boolean;
+  /** Skip hydrogen atoms (and their bonds); the graph itself is untouched. */
+  hideHydrogens: boolean;
 }
 
 export const BALL_AND_STICK: SceneStyle = {
+  id: "ball-and-stick",
   atomRadiusScale: 0.32,
   minAtomRadius: 0.16,
   bondRadius: 0.075,
   multiBondOffset: 0.19,
+  useVdw: false,
+  drawBonds: true,
+  hideHydrogens: false,
 };
+
+export const STICKS: SceneStyle = {
+  id: "sticks",
+  atomRadiusScale: 0.16,
+  minAtomRadius: 0.12,
+  bondRadius: 0.12,
+  multiBondOffset: 0.22,
+  useVdw: false,
+  drawBonds: true,
+  hideHydrogens: false,
+};
+
+export const SPACEFILL: SceneStyle = {
+  id: "spacefill",
+  atomRadiusScale: 1,
+  minAtomRadius: 0.8,
+  bondRadius: 0.075,
+  multiBondOffset: 0.19,
+  useVdw: true,
+  drawBonds: false,
+  hideHydrogens: false,
+};
+
+export const STYLES: Record<SceneStyle["id"], SceneStyle> = { "ball-and-stick": BALL_AND_STICK, sticks: STICKS, spacefill: SPACEFILL };
 
 export type PickData = { kind: "atom"; id: AtomId } | { kind: "bond"; id: BondId };
 
@@ -75,7 +109,8 @@ export function materialFor(color: number, selected: Highlight, opacity = 1): TH
 }
 
 export function atomRadius(element: string, style: SceneStyle = BALL_AND_STICK): number {
-  return Math.max(style.minAtomRadius, covalentRadius(element) * style.atomRadiusScale);
+  const base = style.useVdw ? vdwRadius(element) : covalentRadius(element);
+  return Math.max(style.minAtomRadius, base * style.atomRadiusScale);
 }
 
 function toVec(v: Vec3): THREE.Vector3 {
@@ -126,8 +161,10 @@ export function buildMoleculeScene(mol: Molecule, style: SceneStyle = BALL_AND_S
   const bondSegments = new Map<BondId, THREE.Mesh[]>();
   const labels: LabelAnchor[] = [];
   const positions = new Map<AtomId, THREE.Vector3>();
+  const hidden = new Set<AtomId>(style.hideHydrogens ? mol.atoms.filter((a) => a.element === "H").map((a) => a.id) : []);
 
   for (const atom of mol.atoms) {
+    if (hidden.has(atom.id)) continue;
     const r = atomRadius(atom.element, style);
     const color = elementColor(atom.element);
     const mesh = new THREE.Mesh(SPHERE, materialFor(color, false));
@@ -142,9 +179,10 @@ export function buildMoleculeScene(mol: Molecule, style: SceneStyle = BALL_AND_S
   }
 
   for (const bond of mol.bonds) {
+    if (!style.drawBonds) break;
     const a = positions.get(bond.atomA);
     const b = positions.get(bond.atomB);
-    if (!a || !b) continue; // dangling bond: validator reports it, renderer skips it
+    if (!a || !b) continue; // dangling or hidden-hydrogen bond: nothing to draw
     const dir = new THREE.Vector3().subVectors(b, a).normalize();
     const mid = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
     const colorA = elementColor(mol.atoms.find((x) => x.id === bond.atomA)!.element);

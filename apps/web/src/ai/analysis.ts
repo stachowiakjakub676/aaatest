@@ -14,10 +14,14 @@ function lipinski(report: Pick<AnalysisReport, "engine" | "molecule">): RuleChec
     if (value === undefined) return;
     checks.push({ id, label, passed: value <= limit, detail: `${label}: ${Number.isInteger(value) ? value : value.toFixed(2)}${unit} (limit ${limit}${unit})` });
   };
-  rule("ro5-mw", "Molecular weight ≤ 500", mw, 500, " g/mol");
-  rule("ro5-logp", "cLogP ≤ 5", d.cLogP?.value, 5);
-  rule("ro5-hbd", "H-bond donors ≤ 5", d.hBondDonors?.value, 5);
-  rule("ro5-hba", "H-bond acceptors ≤ 10", d.hBondAcceptors?.value, 10);
+  rule("ro5-mw", "Lipinski: molecular weight ≤ 500", mw, 500, " g/mol");
+  rule("ro5-logp", "Lipinski: cLogP ≤ 5", d.cLogP?.value, 5);
+  rule("ro5-hbd", "Lipinski: H-bond donors ≤ 5", d.hBondDonors?.value, 5);
+  rule("ro5-hba", "Lipinski: H-bond acceptors ≤ 10", d.hBondAcceptors?.value, 10);
+  rule("veber-rb", "Veber: rotatable bonds ≤ 10", d.rotatableBonds?.value, 10);
+  rule("veber-tpsa", "Veber: TPSA ≤ 140", d.tpsa?.value, 140, " Å²");
+  rule("egan-tpsa", "Egan: TPSA ≤ 131.6", d.tpsa?.value, 131.6, " Å²");
+  rule("egan-logp", "Egan: cLogP ≤ 5.88", d.cLogP?.value, 5.88);
   return checks;
 }
 

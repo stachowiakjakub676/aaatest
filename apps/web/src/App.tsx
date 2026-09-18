@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SAMPLE_MOLECULES, cleanupGeometry, createMolecule, validateMolecule } from "@molecular-cad/molecule-model";
-import type { BondOrder, Molecule, Vec3 } from "@molecular-cad/molecule-model";
+import type { BondOrder, FragmentTemplate, Molecule, Vec3 } from "@molecular-cad/molecule-model";
+import { STYLES } from "./viewer/sceneBuilder";
+import type { SceneStyle } from "./viewer/sceneBuilder";
 import { Viewport } from "./viewer/Viewport";
 import type { ViewportHandle } from "./viewer/Viewport";
 import type { PickData } from "./viewer/sceneBuilder";
@@ -79,6 +81,9 @@ export function App() {
   const [bondOrder, setBondOrder] = useState<BondOrder>("single");
   const [pendingAtomId, setPendingAtomId] = useState<string | null>(null);
   const [showLabels, setShowLabels] = useState(true);
+  const [styleId, setStyleId] = useState<SceneStyle["id"]>(() => (["ball-and-stick", "sticks", "spacefill"].includes(readSetting("mcad.style", "ball-and-stick")) ? (readSetting("mcad.style", "ball-and-stick") as SceneStyle["id"]) : "ball-and-stick"));
+  const [hideHydrogens, setHideHydrogens] = useState(false);
+  const sceneStyle = useMemo<SceneStyle>(() => ({ ...STYLES[styleId], hideHydrogens }), [styleId, hideHydrogens]);
   const [additiveMode, setAdditiveMode] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [autoTidy, setAutoTidy] = useState(() => readSetting("mcad.autoTidy", "1") !== "0");
@@ -113,6 +118,15 @@ export function App() {
     () => RULE_ANALYSIS.analyze({ molecule, validation, engineValidation: chemistry.state.validation, properties: chemistry.state.properties }),
     [molecule, validation, chemistry.state.validation, chemistry.state.properties],
   );
+  const stereoLabels = useMemo(() => {
+    const st = chemistry.state.stereo;
+    if (!st) return undefined;
+    const atoms: Record<string, string> = {};
+    const bonds: Record<string, string> = {};
+    for (const a of st.atoms) atoms[a.atomId] = a.label;
+    for (const b of st.bonds) bonds[b.bondId] = b.label;
+    return { atoms, bonds };
+  }, [chemistry.state.stereo]);
   const retroService = useMemo(() => new MockRetrosynthesisService(chemistry.state.status === "ready" ? engine : null), [engine, chemistry.state.status]);
 
   // Explanations and retro results describe a specific molecule; drop them when it changes.
@@ -444,6 +458,20 @@ export function App() {
           });
         }}
         onTidy={tidyNow}
+        styleId={styleId}
+        onStyle={(id) => {
+          setStyleId(id);
+          writeSetting("mcad.style", id);
+        }}
+        hideHydrogens={hideHydrogens}
+        onToggleHideHydrogens={() => setHideHydrogens((v) => !v)}
+        onMirror={() => run((m) => cmd.mirror(m))}
+        selectedAtomId={selection.atoms.length === 1 && selection.bonds.length === 0 ? selection.atoms[0]! : null}
+        onAttachFragment={(fragment: FragmentTemplate) => {
+          const anchor = selection.atoms[0];
+          if (!anchor) return;
+          run((m) => cmd.attachFragment(m, anchor, fragment));
+        }}
       />
 
       <main className="viewport-area">
@@ -457,6 +485,8 @@ export function App() {
           additiveMode={additiveMode}
           onTap={onTap}
           onDragAtom={onDragAtom}
+          style={sceneStyle}
+          stereoLabels={stereoLabels}
         />
         {molecule.atoms.length === 0 && (
           <div className="viewport-empty">
@@ -484,6 +514,10 @@ export function App() {
         molecule={molecule}
         selection={selection}
         validation={validation}
+        stereo={chemistry.state.stereo}
+        onInvertCentre={(id) => run((m) => cmd.invertStereocentre(m, id))}
+        onFlipBond={(id) => run((m) => cmd.flipDoubleBond(m, id))}
+        onRotateBond={(id, deg) => run((m) => cmd.rotateBond(m, id, deg))}
         onSetElement={(id, el) => run((m) => cmd.setElement(m, id, el))}
         onSetCharge={(id, c) => run((m) => cmd.setFormalCharge(m, id, c))}
         onDeleteAtom={(id) => run((m) => cmd.deleteAtom(m, id))}

@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { ELEMENTS, isKnownElement } from "@molecular-cad/molecule-model";
-import type { BondOrder, Molecule } from "@molecular-cad/molecule-model";
+import { ELEMENTS, FRAGMENTS, isKnownElement } from "@molecular-cad/molecule-model";
+import type { BondOrder, FragmentTemplate, Molecule } from "@molecular-cad/molecule-model";
+import type { SceneStyle } from "../viewer/sceneBuilder";
 import { MODES, QUICK_ELEMENTS } from "../editor/modes";
 import type { EditorMode } from "../editor/modes";
 
@@ -36,7 +37,22 @@ export interface ToolboxProps {
   autoTidy: boolean;
   onToggleAutoTidy(): void;
   onTidy(): void;
+  styleId: SceneStyle["id"];
+  onStyle(id: SceneStyle["id"]): void;
+  hideHydrogens: boolean;
+  onToggleHideHydrogens(): void;
+  onMirror(): void;
+  /** Attach a library fragment to the selected atom (null when no single atom is selected). */
+  selectedAtomId: string | null;
+  onAttachFragment(fragment: FragmentTemplate): void;
 }
+
+const FRAGMENT_CATEGORIES: Array<[FragmentTemplate["category"], string]> = [
+  ["ring", "Rings"],
+  ["group", "Groups"],
+  ["alkyl", "Alkyl"],
+  ["halogen", "Halogens"],
+];
 
 const ORDERS: Array<{ id: BondOrder; label: string }> = [
   { id: "single", label: "1" },
@@ -49,6 +65,7 @@ export function Toolbox(props: ToolboxProps) {
   const [custom, setCustom] = useState("");
   const [customError, setCustomError] = useState<string | null>(null);
   const [sampleId, setSampleId] = useState("");
+  const [fragmentCategory, setFragmentCategory] = useState<FragmentTemplate["category"]>("ring");
 
   const applyCustom = () => {
     const sym = custom.trim();
@@ -157,6 +174,25 @@ export function Toolbox(props: ToolboxProps) {
       </section>
 
       <section className="panel-section">
+        <h2 className="panel-title">Fragments</h2>
+        <div className="seg" role="radiogroup" aria-label="Fragment category">
+          {FRAGMENT_CATEGORIES.map(([id, label]) => (
+            <button key={id} type="button" role="radio" aria-checked={fragmentCategory === id} className={`seg-item ${fragmentCategory === id ? "active" : ""}`} onClick={() => setFragmentCategory(id)}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="fragments">
+          {FRAGMENTS.filter((f) => f.category === fragmentCategory).map((f) => (
+            <button key={f.id} id={`frag-${f.id}`} type="button" className="btn btn-small frag" disabled={!props.selectedAtomId} onClick={() => props.onAttachFragment(f)} title={props.selectedAtomId ? `Attach ${f.name} to the selected atom (replaces one hydrogen on each side)` : "Select one atom first (Select tool), then tap a fragment"}>
+              {f.name}
+            </button>
+          ))}
+        </div>
+        <p className="hint">{props.selectedAtomId ? `Tapping a fragment attaches it to atom ${props.selectedAtomId}.` : "Select a single atom to attach fragments to it. Built with RDKit 3D templates; auto-tidy relaxes the join."}</p>
+      </section>
+
+      <section className="panel-section">
         <h2 className="panel-title">Edit</h2>
         <div className="button-row">
           <button id="btn-undo" type="button" className="btn" onClick={props.onUndo} disabled={!props.canUndo} title={props.undoLabel ? `Undo: ${props.undoLabel} (Ctrl+Z)` : "Nothing to undo"}>
@@ -177,6 +213,9 @@ export function Toolbox(props: ToolboxProps) {
             Remove H
           </button>
         </div>
+        <button id="btn-mirror" type="button" className="btn btn-block" onClick={props.onMirror} title="Mirror image: every stereocentre inverts (enantiomer)">
+          Mirror (enantiomer)
+        </button>
       </section>
 
       <section className="panel-section">
@@ -227,6 +266,18 @@ export function Toolbox(props: ToolboxProps) {
             Reset
           </button>
         </div>
+        <label className="field">
+          <span className="field-label">Display style</span>
+          <select id="style-select" className="select" value={props.styleId} onChange={(e) => props.onStyle(e.target.value as SceneStyle["id"])}>
+            <option value="ball-and-stick">Ball and stick</option>
+            <option value="sticks">Sticks</option>
+            <option value="spacefill">Space-filling (van der Waals)</option>
+          </select>
+        </label>
+        <label className="toggle">
+          <input id="toggle-hide-h" type="checkbox" checked={props.hideHydrogens} onChange={props.onToggleHideHydrogens} />
+          <span>Hide hydrogens</span>
+        </label>
         <label className="toggle">
           <input id="toggle-labels" type="checkbox" checked={props.showLabels} onChange={props.onToggleLabels} />
           <span>Atom labels</span>

@@ -13,7 +13,7 @@ test("in-browser RDKit computes properties and reports valence errors", async ({
   const text = await panelText(page);
   expect(/Canonical SMILES \| CCO/.test(text)).toBe(true);
   expect(text).toContain("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"); // ethanol InChIKey
-  expect(text).toContain("No prediction models configured");
+  expect(text).toContain("ESOL"); // predictions are a separate, labelled section
 
   // Make it chemically impossible (C≡C≡O) and check both validators react.
   await page.click("#tool-bond");

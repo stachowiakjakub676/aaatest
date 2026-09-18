@@ -97,6 +97,25 @@ the editor; imports with errors are blocked. SMILES import through the in-browse
 engine it yields an ETKDG conformer that honours the SMILES stereochemistry. Flat 2D MOL input is
 lifted into 3D on request.
 
+## Designing new compounds
+
+The editor is built for inventing structures, not browsing a catalogue:
+
+- **Fragment library** (toolbox): rings, functional groups, alkyls and halogens as RDKit-generated
+  3D templates. Select one atom and tap a fragment; one hydrogen on each side is replaced by the
+  new bond and the clean-up relaxes the join. Any of the 118 elements can still be placed by hand.
+- **Stereochemistry**: CIP labels (R/S, E/Z) are perceived from the 3D coordinates by the chemistry
+  engine and shown on the atom labels and in the inspector; unassigned centres are flagged.
+  *Mirror* gives the enantiomer, *Invert* swaps two substituents of one centre, *Flip E/Z* and
+  torsion rotation act on a selected bond. All are undoable commands on the graph.
+- **Display styles**: ball-and-stick, sticks, space-filling (van der Waals radii), hide hydrogens.
+  Styles never touch the graph.
+- **Estimated properties** (Chemistry tab, marked PREDICTED): ESOL aqueous solubility (Delaney
+  2004) computed client-side from descriptors, plus QED drug-likeness and the SA synthetic
+  accessibility score from the server engine. Every item names its model and its known error.
+  Rule sets (Lipinski, Veber, Egan) are evaluated on computed descriptors and shown as rule checks.
+- **Is it new?** The InChIKey links to a PubChem search; no hit is a hint, not proof, of novelty.
+
 ## Assistant and retrosynthesis (phases 7–8)
 
 The right panel has four tabs: **Inspect**, **Chemistry**, **Assistant**, **Retro**.

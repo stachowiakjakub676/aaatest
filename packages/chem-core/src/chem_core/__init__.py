@@ -12,6 +12,8 @@ from .validation import ValidationIssue, validate_molecule
 from .properties import basic_properties
 from .conversion import molecule_from_smiles, molecule_to_smiles
 from .geometry import optimize_geometry
+from .stereo import stereo_info
+from .estimates import estimates
 
 __all__ = [
     "Atom",
@@ -27,4 +29,6 @@ __all__ = [
     "molecule_from_smiles",
     "molecule_to_smiles",
     "optimize_geometry",
+    "stereo_info",
+    "estimates",
 ]

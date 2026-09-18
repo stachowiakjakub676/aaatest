@@ -15,7 +15,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from chem_core import basic_properties, molecule_from_dict, molecule_from_smiles, molecule_to_dict, molecule_to_smiles, validate_molecule
+from chem_core import basic_properties, estimates, molecule_from_dict, molecule_from_smiles, molecule_to_dict, molecule_to_smiles, stereo_info, validate_molecule
 from chem_core.geometry import optimize_geometry
 from chem_core.schema import SchemaError
 
@@ -144,3 +144,23 @@ def ai_explain(req: ExplainRequest) -> dict:
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {"kind": "explanation", "model": provider.name, "text": out.text, "suggestions": [s.model_dump() for s in out.suggestions]}
+
+
+@app.post("/stereo")
+def stereo(req: MoleculeRequest) -> dict:
+    """CIP labels perceived from the 3D coordinates."""
+    mol = _parse(req.molecule)
+    result = validate_molecule(mol)
+    if not result["valid"]:
+        raise HTTPException(status_code=409, detail={"message": "Structure does not sanitise; fix validation errors first.", "validation": result})
+    return stereo_info(mol)
+
+
+@app.post("/estimates")
+def estimates_endpoint(req: MoleculeRequest) -> dict:
+    """PREDICTED properties from published models (QED, synthetic accessibility)."""
+    mol = _parse(req.molecule)
+    result = validate_molecule(mol)
+    if not result["valid"]:
+        raise HTTPException(status_code=409, detail={"message": "Structure does not sanitise; fix validation errors first.", "validation": result})
+    return {"kind": "predicted", "items": estimates(mol)}

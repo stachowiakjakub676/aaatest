@@ -11,3 +11,5 @@ export * from "./molfile";
 export * from "./cleanup";
 export * from "./formats";
 export * from "./perception";
+export * from "./transform";
+export * from "./samples/fragments";

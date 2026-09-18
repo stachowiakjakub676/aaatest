@@ -1,6 +1,5 @@
 import { useState } from "react";
 import type { ChemistryEngine } from "../chemistry/engine";
-import { NO_PREDICTIONS } from "../chemistry/engine";
 import type { ChemistryState } from "../chemistry/useChemistry";
 
 export type EngineChoice = "wasm" | "server";
@@ -129,12 +128,59 @@ export function ChemistryPanel(props: ChemistryPanelProps) {
         )}
       </section>
 
-      <section className="panel-section panel-section-muted">
+      {state.stereo && (state.stereo.atoms.length > 0 || state.stereo.bonds.length > 0) && (
+        <section className="panel-section">
+          <h2 className="panel-title">
+            Stereochemistry <span className="tag tag-computed">computed</span>
+          </h2>
+          {state.stereo.atoms.map((a) => (
+            <Row key={a.atomId} label={`Centre ${a.atomId}`} value={a.label === "?" ? "unassigned (flat or ambiguous geometry)" : a.label} />
+          ))}
+          {state.stereo.bonds.map((b) => (
+            <Row key={b.bondId} label={`Double bond ${b.bondId}`} value={b.label} />
+          ))}
+          <p className="hint">CIP labels perceived from the 3D coordinates ({state.stereo.source}). Select an atom or bond to invert or flip it.</p>
+        </section>
+      )}
+
+      <section className="panel-section">
         <h2 className="panel-title">
-          Predictions <span className="tag tag-predicted">predicted</span>
+          Estimated properties <span className="tag tag-predicted">predicted</span>
         </h2>
-        <p className="hint">{NO_PREDICTIONS.label}. Model outputs will appear here with their provenance and uncertainty, never as measurements (phase 7).</p>
+        {state.predictions.length === 0 && <p className="hint">{props.hasAtoms ? "No estimates yet (waiting for descriptors or the structure is rejected)." : "Add atoms to get estimates."}</p>}
+        <ul className="prediction-list">
+          {state.predictions.map((p) => (
+            <li key={p.id} className="prediction">
+              <div className="row">
+                <span className="row-label">{p.label}</span>
+                <span className="row-value mono">
+                  {typeof p.value === "number" ? fmtNumber(p.value) : p.value}
+                  {p.unit ? ` ${p.unit}` : ""}
+                </span>
+              </div>
+              <p className="hint">
+                {p.model}
+                {p.uncertainty ? `. ${p.uncertainty}.` : ""}
+              </p>
+            </li>
+          ))}
+        </ul>
+        <p className="hint">Model outputs, not measurements: each one names its model and its known error. {state.predictionSource}</p>
       </section>
+
+      {state.properties?.inchiKey && (
+        <section className="panel-section">
+          <h2 className="panel-title">Is it new?</h2>
+          <Row label="InChIKey" value={state.properties.inchiKey} />
+          <p className="hint">
+            Novelty can only be checked against databases. Search this exact structure in PubChem:{" "}
+            <a className="link" href={`https://pubchem.ncbi.nlm.nih.gov/#query=${encodeURIComponent(state.properties.inchiKey)}`} target="_blank" rel="noreferrer">
+              open PubChem
+            </a>
+            . No hit is a hint, not proof, that the compound is unreported.
+          </p>
+        </section>
+      )}
     </>
   );
 }

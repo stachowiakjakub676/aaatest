@@ -1,5 +1,7 @@
+import { useState } from "react";
 import {
   ELEMENTS,
+  bondInRing,
   bondOrderValue,
   bondsOfAtom,
   chargeLabel,
@@ -16,6 +18,7 @@ import {
 import type { BondOrder, Molecule, ValidationResult } from "@molecular-cad/molecule-model";
 import type { Selection } from "../state/selection";
 import { measureSelection } from "../state/measure";
+import type { StereoInfo } from "../chemistry/engine";
 
 export interface InspectorActions {
   onSetElement(atomId: string, element: string): void;
@@ -24,12 +27,17 @@ export interface InspectorActions {
   onAddHydrogens(atomId: string): void;
   onSetBondOrder(bondId: string, order: BondOrder): void;
   onDeleteBond(bondId: string): void;
+  onInvertCentre(atomId: string): void;
+  onFlipBond(bondId: string): void;
+  onRotateBond(bondId: string, degrees: number): void;
 }
 
 export interface InspectorProps extends InspectorActions {
   molecule: Molecule;
   selection: Selection;
   validation: ValidationResult;
+  /** CIP labels from the chemistry engine (null while unavailable). */
+  stereo: StereoInfo | null;
   /** Extra sections (e.g. the chemistry engine panel) rendered after the selection. */
   children?: React.ReactNode;
 }
@@ -130,15 +138,27 @@ export function Inspector(props: InspectorProps) {
   );
 }
 
-function AtomDetails({ molecule, atomId, onSetElement, onSetCharge, onDeleteAtom, onAddHydrogens }: InspectorProps & { atomId: string }) {
+function AtomDetails({ molecule, atomId, stereo, onSetElement, onSetCharge, onDeleteAtom, onAddHydrogens, onInvertCentre }: InspectorProps & { atomId: string }) {
   const atom = getAtom(molecule, atomId);
   if (!atom) return null;
   const el = getElement(atom.element);
   const bonds = bondsOfAtom(molecule, atomId);
   const implicitH = implicitHydrogenCount(molecule, atomId);
+  const cip = stereo?.atoms.find((a) => a.atomId === atomId)?.label;
   return (
     <>
       <Row label="Atom" value={`${atom.element}${chargeLabel(atom.formalCharge)} · ${atom.id}`} />
+      {cip && (
+        <div className="row">
+          <span className="row-label">Stereocentre (CIP)</span>
+          <span className="row-value">
+            <span className="mono">{cip === "?" ? "unassigned" : cip}</span>{" "}
+            <button type="button" className="btn btn-small" id="btn-invert-centre" onClick={() => onInvertCentre(atomId)} title="Swap two substituents to invert this centre">
+              Invert
+            </button>
+          </span>
+        </div>
+      )}
       <label className="field">
         <span className="field-label">Element</span>
         <select id="inspector-element" className="select mono" value={atom.element} onChange={(e) => onSetElement(atomId, e.target.value)}>
@@ -191,15 +211,49 @@ function AtomDetails({ molecule, atomId, onSetElement, onSetCharge, onDeleteAtom
   );
 }
 
-function BondDetails({ molecule, bondId, onSetBondOrder, onDeleteBond }: InspectorProps & { bondId: string }) {
+function BondDetails({ molecule, bondId, stereo, onSetBondOrder, onDeleteBond, onFlipBond, onRotateBond }: InspectorProps & { bondId: string }) {
+  const [step, setStep] = useState(30);
   const bond = getBond(molecule, bondId);
   if (!bond) return null;
   const a = getAtom(molecule, bond.atomA);
   const b = getAtom(molecule, bond.atomB);
+  const ez = stereo?.bonds.find((x) => x.bondId === bondId)?.label;
+  const inRing = bondInRing(molecule, bondId);
   return (
     <>
       <Row label="Bond" value={bond.id} />
       <Row label="Atoms" value={`${a?.element ?? "?"}${bond.atomA} — ${b?.element ?? "?"}${bond.atomB}`} />
+      {ez && (
+        <div className="row">
+          <span className="row-label">Configuration (CIP)</span>
+          <span className="row-value">
+            <span className="mono">{ez}</span>{" "}
+            <button type="button" className="btn btn-small" id="btn-flip-ez" onClick={() => onFlipBond(bondId)} disabled={inRing} title="Rotate one side by 180° to swap E and Z">
+              Flip E/Z
+            </button>
+          </span>
+        </div>
+      )}
+      {!inRing && bond.order === "single" && (
+        <div className="field">
+          <span className="field-label">Rotate around bond (torsion)</span>
+          <div className="button-row">
+            <button type="button" className="btn btn-small" onClick={() => onRotateBond(bondId, -step)} title="Rotate the B side counter-clockwise">
+              −{step}°
+            </button>
+            <select className="select" value={step} onChange={(e) => setStep(Number(e.target.value))} aria-label="Rotation step">
+              {[5, 15, 30, 60, 90, 120, 180].map((d) => (
+                <option key={d} value={d}>
+                  {d}°
+                </option>
+              ))}
+            </select>
+            <button type="button" className="btn btn-small" onClick={() => onRotateBond(bondId, step)} title="Rotate the B side clockwise">
+              +{step}°
+            </button>
+          </div>
+        </div>
+      )}
       <div className="field">
         <span className="field-label">Order (value {bondOrderValue(bond.order)})</span>
         <div className="seg" role="radiogroup" aria-label="Bond order">

@@ -57,6 +57,18 @@ export interface EngineCapabilities {
   optimizeGeometry: boolean;
   /** SMILES import produces stereo-correct 3D (server) or a 3D sketch (WASM). */
   smiles: boolean;
+  /** CIP stereo labels perceived from 3D coordinates. */
+  stereo: boolean;
+  /** Model-based estimates (QED, synthetic accessibility) beyond descriptor regressions. */
+  estimates: boolean;
+}
+
+export interface StereoInfo {
+  kind: "computed";
+  source: string;
+  /** "?" marks a stereocentre whose configuration could not be assigned. */
+  atoms: Array<{ atomId: string; label: "R" | "S" | "r" | "s" | "?" }>;
+  bonds: Array<{ bondId: string; label: "E" | "Z" }>;
 }
 
 export interface FromSmilesOptions {
@@ -83,6 +95,9 @@ export interface ChemistryEngine {
   optimizeGeometry(mol: Molecule, opts?: { embed?: boolean }): Promise<OptimizedGeometry>;
   fromSmiles(smiles: string, opts?: FromSmilesOptions): Promise<FromSmilesResult>;
   toSmiles(mol: Molecule): Promise<string>;
+  stereo(mol: Molecule): Promise<StereoInfo>;
+  /** PREDICTED items from the engine's models (empty when the engine has none). */
+  estimates(mol: Molecule): Promise<Prediction[]>;
 }
 
 export class EngineError extends Error {
@@ -101,10 +116,13 @@ export class EngineError extends Error {
  */
 export interface Prediction {
   kind: "predicted";
+  id: string;
+  /** Model name with citation, e.g. "ESOL (Delaney, J. Chem. Inf. Comput. Sci. 2004)". */
   model: string;
   label: string;
   value: number | string;
   unit?: string;
+  /** Plain statement of the model's known error or scale. */
   uncertainty?: string;
 }
 

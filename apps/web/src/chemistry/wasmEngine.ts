@@ -5,7 +5,7 @@
  */
 import { cleanupGeometry, molecularWeight, parseMolfile, writeMolfile } from "@molecular-cad/molecule-model";
 import type { Molecule } from "@molecular-cad/molecule-model";
-import type { ChemistryEngine, ComputedProperties, Descriptor, EngineIssue, EngineValidation, FromSmilesOptions, FromSmilesResult, OptimizedGeometry } from "./engine";
+import type { ChemistryEngine, ComputedProperties, Descriptor, EngineIssue, EngineValidation, FromSmilesOptions, FromSmilesResult, OptimizedGeometry, Prediction, StereoInfo } from "./engine";
 import { EngineError } from "./engine";
 
 // Minimal structural typing of the parts of the RDKit JS API we use.
@@ -15,6 +15,7 @@ export interface RDKitMol {
   get_inchi(): string;
   get_descriptors(): string;
   get_molblock(details?: string): string;
+  get_stereo_tags(): string;
   get_num_atoms(): number;
   add_hs_in_place(): boolean;
   remove_hs_in_place(): boolean;
@@ -94,7 +95,7 @@ export function browserRDKitLoader(baseUrl = "./rdkit/"): RDKitLoader {
 export class WasmRdkitEngine implements ChemistryEngine {
   readonly id = "rdkit-wasm";
   readonly label = "RDKit in browser (WebAssembly)";
-  readonly capabilities = { validate: true, properties: true, optimizeGeometry: false, smiles: true };
+  readonly capabilities = { validate: true, properties: true, optimizeGeometry: false, smiles: true, stereo: true, estimates: false };
   private modulePromise: Promise<RDKitModule> | null = null;
   private version = "";
   private log: RDKitLog | null = null;
@@ -232,6 +233,38 @@ export class WasmRdkitEngine implements ChemistryEngine {
     } finally {
       rd.delete();
     }
+  }
+
+  /** CIP labels: RDKit perceives them from the 3D molblock we send. */
+  async stereo(mol: Molecule): Promise<StereoInfo> {
+    const empty: StereoInfo = { kind: "computed", source: `rdkit-wasm ${this.version}`, atoms: [], bonds: [] };
+    if (mol.atoms.length === 0) return empty;
+    const { rd, error } = await this.parse(mol);
+    if (!rd) throw new EngineError("Structure does not sanitise; fix validation errors first.", { valid: false, issues: issuesFromLog(error, mol) });
+    try {
+      const tags = JSON.parse(rd.get_stereo_tags()) as { CIP_atoms?: Array<[number, string]>; CIP_bonds?: Array<[number, number, string]> };
+      const atomIds = mol.atoms.map((a) => a.id);
+      const bondIdBetween = (i: number, j: number) => mol.bonds.find((b) => (b.atomA === atomIds[i] && b.atomB === atomIds[j]) || (b.atomA === atomIds[j] && b.atomB === atomIds[i]))?.id;
+      const atoms: StereoInfo["atoms"] = [];
+      for (const [idx, raw] of tags.CIP_atoms ?? []) {
+        const label = raw.replace(/[()]/g, "");
+        const id = atomIds[idx];
+        if (id && (label === "R" || label === "S" || label === "r" || label === "s" || label === "?")) atoms.push({ atomId: id, label });
+      }
+      const bonds: StereoInfo["bonds"] = [];
+      for (const [i, j, raw] of tags.CIP_bonds ?? []) {
+        const label = raw.replace(/[()]/g, "");
+        const id = bondIdBetween(i, j);
+        if (id && (label === "E" || label === "Z")) bonds.push({ bondId: id, label });
+      }
+      return { ...empty, atoms, bonds };
+    } finally {
+      rd.delete();
+    }
+  }
+
+  async estimates(): Promise<Prediction[]> {
+    return []; // QED / SA score need the server engine; ESOL runs client-side in predictions.ts
   }
 }
 

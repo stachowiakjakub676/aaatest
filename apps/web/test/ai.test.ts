@@ -37,7 +37,7 @@ describe("MoleculeAnalysisService (deterministic)", () => {
     expect(r.molecule.heavyAtomCount).toBe(13);
     expect(r.molecule.ringCount).toBe(1);
     expect(r.molecule.functionalGroups).toEqual(expect.arrayContaining(["Ester", "Carboxylic acid", "Aromatic six-membered ring"]));
-    expect(r.ruleChecks.map((c) => c.passed)).toEqual([true, true, true, true]);
+    expect(r.ruleChecks.map((c) => c.passed)).toEqual(Array(8).fill(true));
     expect(r.engine?.canonicalSmiles).toBe(props.canonicalSmiles);
     expect(JSON.stringify(r)).not.toMatch(/predict/i);
     // Deterministic: same input, same report.

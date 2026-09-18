@@ -3,13 +3,13 @@
  */
 import { moleculeFromObject } from "@molecular-cad/molecule-model";
 import type { Molecule } from "@molecular-cad/molecule-model";
-import type { ChemistryEngine, ComputedProperties, Descriptor, EngineValidation, FromSmilesOptions, FromSmilesResult, OptimizedGeometry } from "./engine";
+import type { ChemistryEngine, ComputedProperties, Descriptor, EngineValidation, FromSmilesOptions, FromSmilesResult, OptimizedGeometry, Prediction, StereoInfo } from "./engine";
 import { EngineError } from "./engine";
 
 export class RemoteRdkitEngine implements ChemistryEngine {
   readonly id = "rdkit-server";
   readonly label = "RDKit server (FastAPI)";
-  readonly capabilities = { validate: true, properties: true, optimizeGeometry: true, smiles: true };
+  readonly capabilities = { validate: true, properties: true, optimizeGeometry: true, smiles: true, stereo: true, estimates: true };
 
   constructor(
     public readonly baseUrl: string,
@@ -102,5 +102,17 @@ export class RemoteRdkitEngine implements ChemistryEngine {
     if (mol.atoms.length === 0) throw new EngineError("Empty molecule.");
     const r = await this.post<{ smiles: string }>("/to_smiles", { molecule: mol });
     return r.smiles;
+  }
+
+  async stereo(mol: Molecule): Promise<StereoInfo> {
+    if (mol.atoms.length === 0) return { kind: "computed", source: "rdkit (server)", atoms: [], bonds: [] };
+    const r = await this.post<{ source: string; atoms: StereoInfo["atoms"]; bonds: StereoInfo["bonds"] }>("/stereo", { molecule: mol });
+    return { kind: "computed", source: `${r.source} (server)`, atoms: r.atoms, bonds: r.bonds };
+  }
+
+  async estimates(mol: Molecule): Promise<Prediction[]> {
+    if (mol.atoms.length === 0) return [];
+    const r = await this.post<{ items: Prediction[] }>("/estimates", { molecule: mol });
+    return r.items.map((p) => ({ ...p, kind: "predicted" as const }));
   }
 }

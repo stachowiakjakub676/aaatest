@@ -161,3 +161,19 @@ def test_ai_endpoint_with_fake_provider(monkeypatch):
     assert body["suggestions"][0]["operations"] == [{"op": "tidy"}]
     bad = client.post("/ai/explain", json={"report": {"kind": "predicted"}})
     assert bad.status_code == 422
+
+
+def test_stereo_from_3d_and_estimates():
+    r = client.post("/stereo", json={"molecule": sample("glucose")})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["kind"] == "computed"
+    labels = sorted(a["label"] for a in body["atoms"])
+    assert labels == ["R", "R", "R", "S", "S"]
+    r2 = client.post("/estimates", json={"molecule": sample("aspirin")})
+    assert r2.status_code == 200
+    items = {i["id"]: i for i in r2.json()["items"]}
+    assert r2.json()["kind"] == "predicted"
+    assert 0.5 < items["qed"]["value"] < 0.6
+    assert items["qed"]["kind"] == "predicted" and "Bickerton" in items["qed"]["model"]
+    assert 1 < items["sa-score"]["value"] < 3

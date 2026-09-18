@@ -11,8 +11,8 @@ import type { Molecule, Vec3 } from "@molecular-cad/molecule-model";
 import type { Selection } from "../state/selection";
 import type { EditorMode } from "../editor/modes";
 import type { PickData } from "./sceneBuilder";
-import { applySelection, buildMoleculeScene, moleculeBoundingSphere, pickFromObject } from "./sceneBuilder";
-import type { MoleculeSceneObjects } from "./sceneBuilder";
+import { BALL_AND_STICK, applySelection, buildMoleculeScene, moleculeBoundingSphere, pickFromObject } from "./sceneBuilder";
+import type { MoleculeSceneObjects, SceneStyle } from "./sceneBuilder";
 
 export interface ViewportHandle {
   fitToView(): void;
@@ -32,6 +32,9 @@ export interface ViewportProps {
   onTap(pick: PickData | null, worldPoint: Vec3, additive: boolean): void;
   /** Move-tool drags. `phase` = "move" while dragging, "end" once on release. */
   onDragAtom(atomId: string, position: Vec3, phase: "move" | "end"): void;
+  style?: SceneStyle | undefined;
+  /** Extra text per atom label (e.g. CIP "R"/"S"), and per bond shown on the label of atomA. */
+  stereoLabels?: { atoms: Record<string, string>; bonds: Record<string, string> } | undefined;
 }
 
 const DEFAULT_VIEW_DIR = new THREE.Vector3(0.35, 0.45, 1).normalize();
@@ -49,9 +52,25 @@ interface Engine {
   gizmoScene: THREE.Scene;
   gizmoCamera: THREE.OrthographicCamera;
   labelGroup: THREE.Group;
+  labelEls: Map<string, { el: HTMLElement; base: string }>;
   objects: MoleculeSceneObjects | null;
   render(): void;
   dispose(): void;
+}
+
+function applyStereoLabels(engine: Engine, molecule: Molecule, stereo: ViewportProps["stereoLabels"]): void {
+  for (const [atomId, { el, base }] of engine.labelEls) {
+    let text = base;
+    const atomTag = stereo?.atoms[atomId];
+    if (atomTag) text += ` (${atomTag})`;
+    for (const bond of molecule.bonds) {
+      if (bond.atomA !== atomId) continue;
+      const tag = stereo?.bonds[bond.id];
+      if (tag) text += ` [${tag}]`;
+    }
+    if (el.textContent !== text) el.textContent = text;
+    el.classList.toggle("has-stereo", text !== base);
+  }
 }
 
 function cssVar(el: HTMLElement, name: string, fallback: string): string {
@@ -118,6 +137,7 @@ function createEngine(container: HTMLElement): Engine {
     gizmoScene,
     gizmoCamera,
     labelGroup,
+    labelEls: new Map(),
     objects: null,
     render() {
       const { clientWidth: w, clientHeight: h } = container;
@@ -152,7 +172,8 @@ function createEngine(container: HTMLElement): Engine {
 }
 
 export const Viewport = forwardRef<ViewportHandle, ViewportProps>(function Viewport(props, ref) {
-  const { molecule, selection, showLabels, mode, pendingAtomId } = props;
+  const { molecule, selection, showLabels, mode, pendingAtomId, stereoLabels } = props;
+  const style = props.style ?? BALL_AND_STICK;
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<Engine | null>(null);
   // Latest props for event handlers registered once.
@@ -322,7 +343,8 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(function Viewp
       engine.objects.dispose();
     }
     engine.labelGroup.clear();
-    const objects = buildMoleculeScene(molecule);
+    engine.labelEls.clear();
+    const objects = buildMoleculeScene(molecule, style);
     engine.objects = objects;
     engine.scene.add(objects.group);
     for (const label of objects.labels) {
@@ -333,7 +355,9 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(function Viewp
       obj.position.set(label.position.x, label.position.y, label.position.z);
       obj.center.set(-0.15, 1.15);
       engine.labelGroup.add(obj);
+      engine.labelEls.set(label.atomId, { el, base: label.text });
     }
+    applyStereoLabels(engine, molecule, stereoLabels);
     engine.labelGroup.visible = showLabels;
     applySelection(objects, selection.atoms, selection.bonds, pendingAtomId ? [pendingAtomId] : []);
 
@@ -354,7 +378,7 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(function Viewp
     if (isNewMolecule || firstAtoms || newAtomOffscreen) fit(engine, isNewMolecule ? DEFAULT_VIEW_DIR.clone() : undefined);
     else engine.render();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [molecule]);
+  }, [molecule, style]);
 
   useEffect(() => {
     const engine = engineRef.current;
@@ -362,6 +386,13 @@ export const Viewport = forwardRef<ViewportHandle, ViewportProps>(function Viewp
     applySelection(engine.objects, selection.atoms, selection.bonds, pendingAtomId ? [pendingAtomId] : []);
     engine.render();
   }, [selection, pendingAtomId]);
+
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    applyStereoLabels(engine, molecule, stereoLabels);
+    engine.render();
+  }, [stereoLabels, molecule]);
 
   useEffect(() => {
     const engine = engineRef.current;

@@ -210,6 +210,29 @@ step) and on demand (Tidy, 800 iterations). Real optimisation remains the engine
   is the shipped default and says so in the UI; a deployment plugs its own screener in. The panel
   labels everything as a mock research abstraction.
 
+## 4h. Creativity layer: fragments, stereochemistry, styles, estimates
+
+- **Fragment library**: `packages/chem-core/scripts/generate_fragments.py` embeds 39 templates
+  (ETKDGv3 seed 42, MMFF94) into `molecule-model/src/samples/fragments.ts`; each records the
+  attachment atom. `attachFragment` (editor command) removes one hydrogen on the anchor and on the
+  attachment atom, orients the template so its former C–H axis points at the anchor, copies atoms
+  and bonds with fresh ids, bonds them and requests a tidy. Tested: methane + phenyl → C7H8.
+- **Stereochemistry**: `ChemistryEngine.stereo()` returns CIP labels; the WASM engine reads
+  `get_stereo_tags()` on the 3D molblock (RDKit perceives configuration from coordinates; flat
+  centres come back as "?"), the server uses `AssignStereochemistryFrom3D`. Transforms live in
+  `molecule-model/src/transform.ts`: `mirrorMolecule`, `rotateAroundBond` (branch on one side of an
+  acyclic bond), `invertCentre` (swap the two smallest independent substituent branches; null for
+  ring-locked centres so the UI can fall back to Mirror). Labels are appended to the CSS2D atom
+  labels in the viewport without rebuilding the scene.
+- **Display styles**: `SceneStyle` presets (ball-and-stick, sticks, spacefill with Bondi vdW radii)
+  plus `hideHydrogens`; the builder filters hidden atoms and skips bonds in spacefill. The graph is
+  untouched, so measurements, formulas and undo history are unaffected.
+- **Estimates**: `chemistry/predictions.ts` implements ESOL (Delaney 2004) from cLogP, MW,
+  rotatable bonds and aromatic proportion (six-membered aromatic rings from perception) and merges
+  server estimates (`/estimates`: QED, SA score via RDKit contrib). Every `Prediction` carries
+  `kind: "predicted"`, model + citation and an uncertainty string; the UI keeps them in a separate
+  section from computed descriptors. Rule sets Lipinski, Veber and Egan are `RuleCheck`s.
+
 ## 5. Dependencies
 
 | Dependency                | Version    | Role                                   | Maintenance check (2026-09)                        |
@@ -277,10 +300,10 @@ surface minimal.
 
 | Suite                                   | Count | What it covers                                                        |
 | --------------------------------------- | ----- | --------------------------------------------------------------------- |
-| `packages/molecule-model` (vitest)      | 103   | periodic table, pure edit ops, conformers, validation rules, formula/weight, implicit H, JSON round trips and malformed input, vector maths, atom placement, MOL V2000 read/write, SDF and format detection, sketch clean-up (methane, ring closure, aromatic planarity, twisted double bond, 2D lifting, fixed atoms), perception (rings, cycles, functional groups), id-collision regression |
+| `packages/molecule-model` (vitest)      | 108   | periodic table, pure edit ops, conformers, validation rules, formula/weight, implicit H, JSON round trips and malformed input, vector maths, atom placement, MOL V2000 read/write, SDF and format detection, sketch clean-up (methane, ring closure, aromatic planarity, twisted double bond, 2D lifting, fixed atoms), perception (rings, cycles, functional groups), id-collision regression, transforms (mirror handedness, bond rotation dihedral, centre inversion) |
 | `packages/chem-core` (pytest)           | 12    | schema round trip, RDKit bridge round trip, aromatic handling, engine validation, computed properties, samples validity |
-| `apps/web` (vitest)                     | 46    | scene builder ↔ graph synchronisation, picking, selection, measurements, editor commands, undo/redo history, RDKit WASM engine (real wasm in node) incl. SMILES round trip, remote engine with a fake server, analysis report + rule suggestions, suggestion validation/application (incl. injected operations), template and remote explainers, mock retrosynthesis and safety policy |
-| `tests/e2e` (Playwright)                | 8     | built page in Chromium: open-ended building with ring closure and undo/redo, drag, RDKit properties and valence errors, SMILES/MOL/SDF/JSON import-export round trip, blocked invalid import, assistant suggestions/explanations, mock retro with reaction notes, visual smoke (pixel statistics + screenshot attachment) |
+| `apps/web` (vitest)                     | 56    | scene builder ↔ graph synchronisation, picking, selection, measurements, editor commands, undo/redo history, RDKit WASM engine (real wasm in node) incl. SMILES round trip, remote engine with a fake server, analysis report + rule suggestions, suggestion validation/application (incl. injected operations), template and remote explainers, mock retrosynthesis and provenance policy, fragment library validity and attachment, stereo via real RDKit WASM (mirror flips all labels, single-centre inversion, E/Z flip, unassigned centre), ESOL and composite predictions, rule sets |
+| `tests/e2e` (Playwright)                | 12    | built page in Chromium: open-ended building with ring closure and undo/redo, drag, RDKit properties and valence errors, SMILES/MOL/SDF/JSON import-export round trip, blocked invalid import, assistant suggestions/explanations, mock retro with reaction notes, visual smoke (pixel statistics + screenshot attachment), display styles and hidden hydrogens, stereo labels with mirror, building a new compound from fragments with estimates |
 | `services/api` (pytest)                 | 12    | health, validation errors with atom ids, computed properties, 409 on unsanitisable input, 422 on bad schema, optimisation, SMILES round trip with stereo, garbage SMILES, AI endpoint disabled by default and with a fake provider |
 
 End-to-end checks of the built page (tap to add, attach, bond, undo/redo, inspector edits, delete,
