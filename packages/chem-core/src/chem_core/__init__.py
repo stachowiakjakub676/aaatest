@@ -14,6 +14,7 @@ from .conversion import molecule_from_smiles, molecule_to_smiles
 from .geometry import optimize_geometry
 from .stereo import stereo_info
 from .estimates import estimates
+from .depict import depict_svg
 
 __all__ = [
     "Atom",
@@ -31,4 +32,5 @@ __all__ = [
     "optimize_geometry",
     "stereo_info",
     "estimates",
+    "depict_svg",
 ]

@@ -61,6 +61,13 @@ export interface EngineCapabilities {
   stereo: boolean;
   /** Model-based estimates (QED, synthetic accessibility) beyond descriptor regressions. */
   estimates: boolean;
+  /** 2D structure depiction as SVG. */
+  depict: boolean;
+}
+
+export interface DepictOptions {
+  width?: number;
+  height?: number;
 }
 
 export interface StereoInfo {
@@ -98,6 +105,8 @@ export interface ChemistryEngine {
   stereo(mol: Molecule): Promise<StereoInfo>;
   /** PREDICTED items from the engine's models (empty when the engine has none). */
   estimates(mol: Molecule): Promise<Prediction[]>;
+  /** 2D depiction (hydrogens removed, fresh 2D layout) as an SVG document string. */
+  depict(mol: Molecule, opts?: DepictOptions): Promise<string>;
 }
 
 export class EngineError extends Error {

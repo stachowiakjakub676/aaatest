@@ -3,13 +3,13 @@
  */
 import { moleculeFromObject } from "@molecular-cad/molecule-model";
 import type { Molecule } from "@molecular-cad/molecule-model";
-import type { ChemistryEngine, ComputedProperties, Descriptor, EngineValidation, FromSmilesOptions, FromSmilesResult, OptimizedGeometry, Prediction, StereoInfo } from "./engine";
+import type { ChemistryEngine, ComputedProperties, Descriptor, EngineValidation, FromSmilesOptions, FromSmilesResult, OptimizedGeometry, Prediction, StereoInfo, DepictOptions } from "./engine";
 import { EngineError } from "./engine";
 
 export class RemoteRdkitEngine implements ChemistryEngine {
   readonly id = "rdkit-server";
   readonly label = "RDKit server (FastAPI)";
-  readonly capabilities = { validate: true, properties: true, optimizeGeometry: true, smiles: true, stereo: true, estimates: true };
+  readonly capabilities = { validate: true, properties: true, optimizeGeometry: true, smiles: true, stereo: true, estimates: true, depict: true };
 
   constructor(
     public readonly baseUrl: string,
@@ -114,5 +114,10 @@ export class RemoteRdkitEngine implements ChemistryEngine {
     if (mol.atoms.length === 0) return [];
     const r = await this.post<{ items: Prediction[] }>("/estimates", { molecule: mol });
     return r.items.map((p) => ({ ...p, kind: "predicted" as const }));
+  }
+
+  async depict(mol: Molecule, opts: DepictOptions = {}): Promise<string> {
+    const r = await this.post<{ svg: string }>("/depict", { molecule: mol, width: opts.width ?? 220, height: opts.height ?? 150 });
+    return r.svg;
   }
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { SAMPLE_MOLECULES, cleanupGeometry, createMolecule, validateMolecule } from "@molecular-cad/molecule-model";
+import { SAMPLE_MOLECULES, cleanupGeometry, validateMolecule } from "@molecular-cad/molecule-model";
 import type { BondOrder, FragmentTemplate, Molecule, Vec3 } from "@molecular-cad/molecule-model";
 import { STYLES } from "./viewer/sceneBuilder";
 import type { SceneStyle } from "./viewer/sceneBuilder";
@@ -7,6 +7,7 @@ import { Viewport } from "./viewer/Viewport";
 import type { ViewportHandle } from "./viewer/Viewport";
 import type { PickData } from "./viewer/sceneBuilder";
 import { Toolbox } from "./ui/Toolbox";
+import { Logo } from "./ui/Logo";
 import { Inspector } from "./ui/Inspector";
 import { StatusBar } from "./ui/StatusBar";
 import { EMPTY_SELECTION, applyPick, isEmptySelection, pruneSelection } from "./state/selection";
@@ -15,6 +16,8 @@ import * as cmd from "./editor/commands";
 import type { CommandResult } from "./editor/commands";
 import { canRedo, canUndo, commit, commitFrom, createHistory, redo, redoLabel, replacePresent, undo, undoLabel } from "./editor/history";
 import type { History } from "./editor/history";
+import { blankDoc, blankMolecule, docsFromMolecules, isPristine, newDocId, restoreWorkspaceSnapshot, saveWorkspaceSnapshot } from "./state/workspace";
+import type { Doc } from "./state/workspace";
 import { MODES } from "./editor/modes";
 import type { EditorMode } from "./editor/modes";
 import { WasmRdkitEngine, browserRDKitLoader } from "./chemistry/wasmEngine";
@@ -69,14 +72,28 @@ function writeSetting(key: string, value: string): void {
   }
 }
 
-let newCounter = 0;
-function blankMolecule(): Molecule {
-  newCounter += 1;
-  return createMolecule({ id: `untitled-${newCounter}`, name: "Untitled", metadata: { source: "editor" } });
-}
+const AUTOSAVE_MS = 800;
 
 export function App() {
-  const [history, setHistory] = useState<History>(() => createHistory(blankMolecule()));
+  // Workspace: several molecule tabs, each with its own undo history. Restored from the last session.
+  const [workspace, setWorkspace] = useState<{ docs: Doc[]; activeId: string }>(() => {
+    const restored = restoreWorkspaceSnapshot();
+    if (restored) return restored;
+    const doc = blankDoc();
+    return { docs: [doc], activeId: doc.id };
+  });
+  const { docs, activeId } = workspace;
+  const history = (docs.find((d) => d.id === activeId) ?? docs[0]!).history;
+  const setHistory = useCallback(
+    (update: History | ((h: History) => History)) => {
+      setWorkspace((w) => ({ ...w, docs: w.docs.map((d) => (d.id === w.activeId ? { ...d, history: typeof update === "function" ? update(d.history) : update } : d)) }));
+    },
+    [],
+  );
+  useEffect(() => {
+    const t = window.setTimeout(() => saveWorkspaceSnapshot(docs, activeId), AUTOSAVE_MS);
+    return () => window.clearTimeout(t);
+  }, [docs, activeId]);
   const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
   const [mode, setMode] = useState<EditorMode>("add");
   const [element, setElement] = useState("C");
@@ -143,7 +160,10 @@ export function App() {
     return { atoms, bonds };
   }, [chemistry.state.stereo]);
   const retroService = useMemo(() => new MockRetrosynthesisService(chemistry.state.status === "ready" ? engine : null), [engine, chemistry.state.status]);
-  const planner = useMemo(() => new RuleBasedSynthesisPlanner(chemistry.state.status === "ready" ? (m: Molecule) => engine.toSmiles(m) : null), [engine, chemistry.state.status]);
+  const planner = useMemo(() => {
+    const ready = chemistry.state.status === "ready";
+    return new RuleBasedSynthesisPlanner(ready ? (m: Molecule) => engine.toSmiles(m) : null, undefined, ready && engine.capabilities.depict ? (m: Molecule) => engine.depict(m, { width: 220, height: 140 }) : null);
+  }, [engine, chemistry.state.status]);
 
   // Explanations and retro results describe a specific molecule; drop them when it changes.
   useEffect(() => {
@@ -281,8 +301,55 @@ export function App() {
     });
   }, []);
 
+  /** Open a molecule in a tab: reuses the active tab when it is untouched, otherwise adds one (nothing is lost). */
   const loadMolecule = useCallback((mol: Molecule, label: string) => {
-    setHistory(createHistory(mol, label));
+    setWorkspace((w) => {
+      const active = w.docs.find((d) => d.id === w.activeId);
+      if (active && isPristine(active)) return { ...w, docs: w.docs.map((d) => (d.id === w.activeId ? { ...d, history: createHistory(mol, label) } : d)) };
+      const doc: Doc = { id: newDocId(), history: createHistory(mol, label) };
+      return { docs: [...w.docs, doc], activeId: doc.id };
+    });
+    setSelection(EMPTY_SELECTION);
+    setPendingAtomId(null);
+  }, []);
+
+  const activateDoc = useCallback((id: string) => {
+    setWorkspace((w) => (w.docs.some((d) => d.id === id) ? { ...w, activeId: id } : w));
+    setSelection(EMPTY_SELECTION);
+    setPendingAtomId(null);
+  }, []);
+
+  const closeDoc = useCallback((id: string) => {
+    setWorkspace((w) => {
+      const idx = w.docs.findIndex((d) => d.id === id);
+      if (idx < 0) return w;
+      const rest = w.docs.filter((d) => d.id !== id);
+      if (rest.length === 0) {
+        const doc = blankDoc();
+        return { docs: [doc], activeId: doc.id };
+      }
+      const activeId = w.activeId === id ? rest[Math.min(idx, rest.length - 1)]!.id : w.activeId;
+      return { docs: rest, activeId };
+    });
+    setSelection(EMPTY_SELECTION);
+    setPendingAtomId(null);
+  }, []);
+
+  const newDoc = useCallback(() => {
+    const doc = blankDoc();
+    setWorkspace((w) => ({ docs: [...w.docs, doc], activeId: doc.id }));
+    setSelection(EMPTY_SELECTION);
+    setPendingAtomId(null);
+  }, []);
+
+  const importWorkspace = useCallback((molecules: Molecule[], activeIndex: number) => {
+    const added = docsFromMolecules(molecules);
+    if (added.length === 0) return;
+    setWorkspace((w) => {
+      const kept = w.docs.filter((d) => !isPristine(d));
+      const active = added[Math.min(Math.max(0, activeIndex), added.length - 1)]!;
+      return { docs: [...kept, ...added], activeId: active.id };
+    });
     setSelection(EMPTY_SELECTION);
     setPendingAtomId(null);
   }, []);
@@ -290,7 +357,11 @@ export function App() {
   const openPrecursor = useCallback(
     (p: Precursor) => {
       const tidy = cleanupGeometry(p.molecule, { maxIterations: TIDY_ITERATIONS }).molecule;
-      loadMolecule({ ...tidy, name: p.name ?? p.smiles ?? p.formula }, `Opened precursor ${p.name ?? p.smiles ?? p.formula}`);
+      // Always a new tab: the target you were working on stays open.
+      const doc: Doc = { id: newDocId(), history: createHistory({ ...tidy, name: p.name ?? p.smiles ?? p.formula }, `Opened precursor ${p.name ?? p.smiles ?? p.formula}`) };
+      setWorkspace((w) => ({ docs: [...w.docs, doc], activeId: doc.id }));
+      setSelection(EMPTY_SELECTION);
+      setPendingAtomId(null);
       setMode("select");
       setTab("chemistry");
     },
@@ -474,9 +545,9 @@ export function App() {
     <div className="app">
       <header className="app-header">
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true" />
-          <span className="brand-name">Molecular CAD</span>
-          <span className="brand-phase">prototype</span>
+          <Logo size={22} />
+          <span className="brand-name">Clapeyron</span>
+          <span className="brand-phase">molecular design · prototype</span>
         </div>
         <div className="header-actions">
           <button type="button" className="btn btn-small" onClick={() => setDialog("import")} title="Import MCAD JSON, MOL, SDF or SMILES (Ctrl+O)">
@@ -493,7 +564,8 @@ export function App() {
           </button>
         </div>
         <div className="header-molecule">
-          <span className="muted">Molecule</span> <strong>{molecule.name ?? molecule.id}</strong>
+          <span className="muted">{docs.length} molecule{docs.length === 1 ? "" : "s"} · </span>
+          <strong>{molecule.name ?? molecule.id}</strong>
           {canUndo(history) && <span className="muted"> · edited</span>}
         </div>
       </header>
@@ -515,7 +587,7 @@ export function App() {
         hasSelection={!isEmptySelection(selection)}
         onAddHydrogens={addHydrogens}
         onRemoveHydrogens={() => run((m) => cmd.removeHydrogens(m))}
-        onNewMolecule={() => loadMolecule(blankMolecule(), "New molecule")}
+        onNewMolecule={newDoc}
         samples={SAMPLE_MOLECULES}
         onLoadSample={(id) => {
           const s = SAMPLE_MOLECULES.find((m) => m.id === id);
@@ -554,6 +626,33 @@ export function App() {
       />
 
       <main className="viewport-area">
+        <div className="doc-tabs" role="tablist" aria-label="Open molecules">
+          {docs.map((d) => {
+            const m = d.history.present;
+            const edited = canUndo(d.history);
+            return (
+              <div key={d.id} role="tab" aria-selected={d.id === activeId} tabIndex={0} className={`doc-tab ${d.id === activeId ? "active" : ""}`} onClick={() => activateDoc(d.id)} onKeyDown={(e) => e.key === "Enter" && activateDoc(d.id)} title={`${m.name ?? m.id} · ${m.atoms.length} atoms${edited ? " · edited" : ""}`}>
+                <span className="doc-tab-name">{m.name ?? m.id}</span>
+                {edited && <span className="doc-tab-dot" aria-label="edited">•</span>}
+                <span
+                  className="doc-tab-close"
+                  role="button"
+                  aria-label={`Close ${m.name ?? m.id}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeDoc(d.id);
+                  }}
+                >
+                  ×
+                </span>
+              </div>
+            );
+          })}
+          <button type="button" className="doc-tab doc-tab-new" onClick={newDoc} title="New empty molecule tab" aria-label="New molecule tab">
+            +
+          </button>
+        </div>
+        <div className="viewport-host">
         <Viewport
           ref={viewportRef}
           molecule={molecule}
@@ -567,6 +666,7 @@ export function App() {
           style={sceneStyle}
           stereoLabels={stereoLabels}
         />
+        </div>
         {molecule.atoms.length === 0 && (
           <div className="viewport-empty">
             <strong>Empty canvas.</strong>
@@ -688,6 +788,12 @@ export function App() {
           engineReady={chemistry.state.status === "ready"}
           onImport={(mol, label) => {
             loadMolecule(mol, label);
+            setMode("select");
+          }}
+          docs={docs}
+          activeDocId={activeId}
+          onImportWorkspace={(mols, activeIndex) => {
+            importWorkspace(mols, activeIndex);
             setMode("select");
           }}
           onClose={() => setDialog(null)}

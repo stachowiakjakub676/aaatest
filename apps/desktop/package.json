@@ -2,7 +2,7 @@
   "name": "@molecular-cad/desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "Tauri 2 desktop shell around the web client (Windows installer, macOS, Linux)",
+  "description": "Clapeyron desktop shell (Tauri 2): Windows installer, macOS, Linux",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",

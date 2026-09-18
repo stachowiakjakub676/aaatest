@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { cleanupGeometry, detectFormat, parseStructureText, serializeMolecule, validateMolecule, writeMolfile, writeSdf } from "@molecular-cad/molecule-model";
 import type { Molecule, ValidationResult } from "@molecular-cad/molecule-model";
 import type { ChemistryEngine } from "../chemistry/engine";
+import { parseWorkspace, serializeWorkspace } from "../state/workspace";
+import type { Doc } from "../state/workspace";
 
 export type DialogMode = "import" | "export";
 
@@ -12,9 +14,13 @@ export interface ImportExportDialogProps {
   engineReady: boolean;
   onImport(molecule: Molecule, label: string): void;
   onClose(): void;
+  /** All open molecule tabs (workspace export) and the handler that opens a whole workspace file. */
+  docs: Doc[];
+  activeDocId: string;
+  onImportWorkspace(molecules: Molecule[], activeIndex: number): void;
 }
 
-type ExportFormat = "mcad-json" | "molfile" | "sdf" | "smiles";
+type ExportFormat = "mcad-json" | "molfile" | "sdf" | "smiles" | "workspace";
 
 interface Parsed {
   molecules: Molecule[];
@@ -33,6 +39,7 @@ export function ImportExportDialog(props: ImportExportDialogProps) {
   const [addH, setAddH] = useState(true);
   const [lift2D, setLift2D] = useState(true);
   const [parsed, setParsed] = useState<Parsed | null>(null);
+  const [workspace, setWorkspace] = useState<{ molecules: Molecule[]; activeIndex: number } | null>(null);
   const [recordIndex, setRecordIndex] = useState(0);
   const [busy, setBusy] = useState(false);
   const [exportFormat, setExportFormat] = useState<ExportFormat>("molfile");
@@ -52,12 +59,13 @@ export function ImportExportDialog(props: ImportExportDialogProps) {
     if (mode !== "export") return;
     let cancelled = false;
     setCopied(false);
-    if (molecule.atoms.length === 0) {
+    if (molecule.atoms.length === 0 && exportFormat !== "workspace") {
       setExportText("");
       return;
     }
     try {
       if (exportFormat === "mcad-json") setExportText(serializeMolecule(molecule, true));
+      else if (exportFormat === "workspace") setExportText(serializeWorkspace(props.docs, props.activeDocId, true));
       else if (exportFormat === "molfile") setExportText(writeMolfile(molecule));
       else if (exportFormat === "sdf") setExportText(writeSdf([molecule]));
       else {
@@ -73,7 +81,7 @@ export function ImportExportDialog(props: ImportExportDialogProps) {
     return () => {
       cancelled = true;
     };
-  }, [mode, exportFormat, molecule, engine]);
+  }, [mode, exportFormat, molecule, engine, props.docs, props.activeDocId]);
 
   const copy = async () => {
     try {
@@ -87,12 +95,12 @@ export function ImportExportDialog(props: ImportExportDialogProps) {
   };
 
   const download = () => {
-    const ext = exportFormat === "mcad-json" ? "json" : exportFormat === "molfile" ? "mol" : exportFormat === "sdf" ? "sdf" : "smi";
+    const ext = exportFormat === "mcad-json" ? "json" : exportFormat === "workspace" ? "clapeyron.json" : exportFormat === "molfile" ? "mol" : exportFormat === "sdf" ? "sdf" : "smi";
     const blob = new Blob([exportText], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${(molecule.name ?? molecule.id).replace(/[^\w.-]+/g, "_")}.${ext}`;
+    a.download = `${(exportFormat === "workspace" ? "workspace" : (molecule.name ?? molecule.id)).replace(/[^\w.-]+/g, "_")}.${ext}`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
@@ -101,8 +109,15 @@ export function ImportExportDialog(props: ImportExportDialogProps) {
   const parse = async () => {
     setBusy(true);
     setParsed(null);
+    setWorkspace(null);
     setRecordIndex(0);
     try {
+      const ws = parseWorkspace(text);
+      if (ws) {
+        setWorkspace(ws);
+        setParsed({ molecules: [], format: "WORKSPACE", note: `${ws.molecules.length} molecule${ws.molecules.length === 1 ? "" : "s"} in this workspace file.`, error: null });
+        return;
+      }
       if (format === "smiles") {
         if (!engine.capabilities.smiles || !engineReady) throw new Error("SMILES import needs a ready chemistry engine.");
         const r = await engine.fromSmiles(text.trim().split(/\s+/)[0] ?? "", { addHydrogens: addH });
@@ -174,6 +189,29 @@ export function ImportExportDialog(props: ImportExportDialogProps) {
               </button>
             </div>
             {parsed?.error && <p className="hint error-text">{parsed.error}</p>}
+            {workspace && (
+              <div className="import-summary">
+                <p className="hint">{parsed?.note}</p>
+                <ul className="fragment-list">
+                  {workspace.molecules.map((m, i) => (
+                    <li key={i} className="mono">
+                      {m.name ?? m.id} · {m.atoms.length} atoms
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  id="btn-import-workspace"
+                  type="button"
+                  className="btn btn-block"
+                  onClick={() => {
+                    props.onImportWorkspace(workspace.molecules, workspace.activeIndex);
+                    onClose();
+                  }}
+                >
+                  Open all as molecule tabs
+                </button>
+              </div>
+            )}
             {parsed && parsed.molecules.length > 1 && (
               <label className="field">
                 <span className="field-label">{parsed.molecules.length} records found; import which one?</span>
@@ -232,11 +270,12 @@ export function ImportExportDialog(props: ImportExportDialogProps) {
                 <option value="molfile">MOL (V2000)</option>
                 <option value="sdf">SDF (MOL + metadata)</option>
                 <option value="mcad-json">MCAD JSON (native, lossless)</option>
+                <option value="workspace">Workspace (all open molecules, .clapeyron.json)</option>
                 <option value="smiles">SMILES (canonical, via chemistry engine)</option>
               </select>
             </label>
             <textarea id="export-text" className="textarea mono" rows={12} readOnly value={exportText} spellCheck={false} />
-            {molecule.atoms.length === 0 && <p className="hint">Nothing to export yet.</p>}
+            {molecule.atoms.length === 0 && exportFormat !== "workspace" && <p className="hint">Nothing to export yet.</p>}
             <div className="button-row">
               <button type="button" className="btn" onClick={() => void copy()} disabled={!exportText}>
                 {copied ? "Copied" : "Copy to clipboard"}

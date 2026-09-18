@@ -1,5 +1,5 @@
 /* ---------------------------------------------------------------------------
-   Molecular CAD — design tokens
+   Clapeyron — design tokens
    Dark-first instrument look; light theme defined for viewers that prefer it.
    --------------------------------------------------------------------------- */
 :root {
@@ -140,12 +140,9 @@ kbd {
   align-items: center;
   gap: 10px;
 }
-.brand-mark {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #9be3ea, var(--accent) 60%, #2b6f77);
-  box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px var(--border-strong);
+.logo {
+  display: block;
+  flex: none;
 }
 .brand-name {
   font-weight: 600;
@@ -1104,4 +1101,182 @@ kbd {
 }
 .seg-wrap .seg-item {
   flex: 1 0 30%;
+}
+
+/* Reaction schemes */
+.scheme {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin: 6px 0;
+}
+.scheme-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.scheme-op {
+  font-size: 18px;
+  color: var(--text-muted);
+}
+.scheme-arrow {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 96px;
+  max-width: 150px;
+  text-align: center;
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.25;
+}
+.scheme-line {
+  font-size: 22px;
+  color: var(--accent);
+  line-height: 1;
+}
+.structure {
+  margin: 0;
+  width: 132px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+.structure.product {
+  border-color: var(--accent);
+}
+.structure.unresolved {
+  border-color: var(--warn);
+}
+.structure-svg {
+  width: 100%;
+  height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+}
+.structure-svg svg {
+  width: 100%;
+  height: 100%;
+}
+.structure-missing {
+  font-size: 10px;
+  color: #333;
+  padding: 4px;
+  word-break: break-all;
+  text-align: center;
+}
+.structure figcaption {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 6px;
+  background: var(--panel);
+  font-size: 11px;
+}
+.structure-name {
+  font-weight: 600;
+  word-break: break-all;
+}
+.structure-formula,
+.structure-tag {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.equation {
+  font-size: 12px;
+  margin: 4px 0;
+  white-space: pre-wrap;
+}
+.step-facts {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  margin: 4px 0;
+}
+.step-facts td {
+  padding: 2px 4px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.step-facts td:first-child {
+  color: var(--text-muted);
+  white-space: nowrap;
+  width: 1%;
+}
+.route-reaction {
+  cursor: pointer;
+}
+.route-reaction:hover strong {
+  color: var(--accent);
+}
+
+/* Molecule tabs above the viewport */
+.viewport-area {
+  display: flex;
+  flex-direction: column;
+}
+.viewport-host {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.doc-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 4px 6px 0;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  flex: none;
+  min-height: 30px;
+}
+.doc-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: var(--panel-2);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  max-width: 200px;
+  white-space: nowrap;
+}
+.doc-tab.active {
+  background: var(--viewport-bg);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.doc-tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.doc-tab-dot {
+  color: var(--select);
+}
+.doc-tab-close {
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+.doc-tab-close:hover {
+  background: var(--border-strong);
+  color: var(--text);
+}
+.doc-tab-new {
+  padding: 3px 10px;
+  font-size: 14px;
 }

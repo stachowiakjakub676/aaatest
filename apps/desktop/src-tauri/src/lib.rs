@@ -1,4 +1,4 @@
-//! Molecular CAD desktop shell.
+//! Clapeyron desktop shell.
 //!
 //! The shell only hosts the web client. Chemistry runs either inside the page (RDKit
 //! WebAssembly) or in the optional Python API, which can be shipped as a sidecar binary
@@ -9,5 +9,5 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .run(tauri::generate_context!())
-        .expect("error while running Molecular CAD");
+        .expect("error while running Clapeyron");
 }

@@ -1,8 +1,8 @@
-/* Molecular CAD service worker: offline app shell.
+/* Clapeyron service worker: offline app shell.
    Strategy: precache the entry and the RDKit engine on install; cache-first for same-origin GET
    requests with a network fallback (hashed Vite assets are immutable, so cache-first is safe).
    Bump CACHE when the caching strategy changes; asset hashes change on every build anyway. */
-const CACHE = "molecular-cad-v1";
+const CACHE = "clapeyron-v2";
 const PRECACHE = ["./", "./index.html", "./manifest.webmanifest", "./rdkit/RDKit_minimal.js", "./rdkit/RDKit_minimal.wasm"];
 
 self.addEventListener("install", (event) => {

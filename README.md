@@ -1,8 +1,12 @@
-# Molecular CAD
+# Clapeyron
 
-A desktop-first, cross-platform application that treats molecular structures the way CAD software
-treats mechanical parts: an interactive 3D viewport, a deterministic molecular graph as the single
-source of truth, and computed properties from established cheminformatics libraries.
+<img src="apps/web/public/icons/logo.svg" width="72" align="right" alt="Clapeyron logo" />
+
+Clapeyron is a desktop-first, cross-platform application that treats molecular structures the way
+CAD software treats mechanical parts: an interactive 3D viewport, a deterministic molecular graph
+as the single source of truth, computed properties from established cheminformatics libraries,
+estimates from published models (named after the Clausius–Clapeyron relation behind the
+vapour-pressure estimate), and a rule-based synthesis planner.
 
 **Status: prototype, all ten phases delivered** (analysis, domain model, 3D viewer, editor,
 chemistry engine, import/export, UX, assistant architecture, retrosynthesis abstraction,
@@ -11,8 +15,13 @@ architecture, dependency choices, risks and roadmap, and [`docs/PACKAGING.md`](d
 for the single-file build, the PWA and the Tauri desktop shell.
 
 The editor is open-ended: start from an empty canvas, place any of the 118 elements, grow
-structures atom by atom without limit, bond, re-order, move, delete, undo and redo. The built-in
-sample molecules are optional starting points, not a catalogue.
+structures atom by atom without limit, bond, re-order, move, delete, undo and redo. Several
+molecules can be open at once as tabs above the viewport, each with its own undo history; the
+workspace is autosaved in the browser and can be exported as one file. The built-in sample
+molecules are optional starting points, not a catalogue.
+
+**Desktop installers** (Windows .exe/.msi, macOS .dmg, Linux AppImage/.deb) are built by the
+"Desktop installers" GitHub Actions workflow; see [`docs/PACKAGING.md`](docs/PACKAGING.md).
 
 ## Layout
 
@@ -37,7 +46,7 @@ pnpm install
 pnpm test          # TypeScript unit tests (domain model + viewer scene builder)
 pnpm typecheck
 pnpm dev           # web client at http://localhost:5173
-pnpm build         # apps/web/dist/ (multi-file, PWA) and apps/web/dist/molecular-cad.html (single file)
+pnpm build         # apps/web/dist/ (multi-file, PWA) and apps/web/dist/clapeyron.html (single file)
 pnpm test:e2e      # Playwright suite against the built page (needs Chromium: pnpm exec playwright install chromium)
 
 cd packages/chem-core
@@ -63,7 +72,7 @@ The client talks to chemistry through one `ChemistryEngine` interface with two i
 Everything an engine returns is labelled **computed**. Estimates from published models are shown
 in a separate section labelled **predicted** (see below).
 
-The single-file build `apps/web/dist/molecular-cad.html` needs no server: open it in Safari on an
+The single-file build `apps/web/dist/clapeyron.html` needs no server: open it in Safari on an
 iPad, in any desktop browser, or host it as a static page.
 
 ## Controls
@@ -146,10 +155,12 @@ The right panel has four tabs: **Inspect**, **Chemistry**, **Assistant**, **Retr
   (esterification, amide coupling, Williamson, reductive amination, Grignard, Wittig, aldol,
   Friedel–Crafts, Suzuki, nitration, oxidations and reductions, …) are applied backwards for up to
   three steps until the precursors are common building blocks (a list of 248 canonical SMILES) or
-  small fragments. Up to three routes are shown in forward order with the reaction class, the
-  class of reagents, a textbook reference and caveats (for example acidic protons that would quench
-  a Grignard reagent); no conditions, amounts or procedures are generated. Any precursor can be
-  opened in the editor. `RetrosynthesisService` (`analyzeTarget`, `generateCandidates`,
+  small fragments. Up to three routes are shown in forward order as reaction schemes: 2D
+  structures drawn by RDKit, the balanced equation with what is released (e.g. H2O) or must be
+  supplied by a reagent (e.g. H2), atom economy, mechanism class, reagent and condition classes,
+  what leaves the reaction, a textbook reference and caveats (for example acidic protons that
+  would quench a Grignard reagent); no quantities or procedures are generated. Any precursor opens
+  in a new tab, so the target stays where it was. `RetrosynthesisService` (`analyzeTarget`, `generateCandidates`,
   `rankCandidates`) remains the research abstraction underneath. The bundled mock recognises functional groups, lists acyclic bonds that
   could conceptually be disconnected (ester, amide, ether, amine, α-carbonyl, generic C–C), shows
   the H-capped fragments with their SMILES, and ranks them with a fixed heuristic. Every candidate

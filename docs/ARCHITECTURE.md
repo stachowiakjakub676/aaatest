@@ -1,4 +1,4 @@
-# Molecular CAD — architecture and phase 0 analysis
+# Clapeyron (Molecular CAD) — architecture and phase 0 analysis
 
 _Last updated after phase 10 (packaging). Keep this file in sync with the code._
 
@@ -261,6 +261,19 @@ step) and on demand (Tidy, 800 iterations). Real optimisation remains the engine
   toolbox becomes a fragment through the engine (`fromSmiles` with hydrogens, first atom =
   attachment point), so the library is open-ended.
 
+## 4j. Workspace: molecule tabs, autosave, workspace files
+
+- `state/workspace.ts`: a `Doc` is a molecule with its own undo `History`. The app holds
+  `{ docs, activeId }`; every editor command runs against the active document only. Loading a
+  sample, importing a structure or opening a planner precursor reuses the active tab when it is
+  untouched (`isPristine`: no atoms, no history) and otherwise adds a tab, so nothing is lost.
+- Autosave: 800 ms after any change the molecules (not the undo stacks) are written to browser
+  storage as a workspace file; the app restores them on start. The same file can be exported and
+  imported through the Import/Export dialog (`kind: "clapeyron-workspace"`, validated molecule by
+  molecule).
+- The Playwright suite starts every test in a fresh browser context, so autosave never leaks
+  between tests.
+
 ## 4i. Rule-based synthesis planner
 
 - `retro/synthesis.ts`: `SynthesisPlanner.plan(target)` applies 30 retrosynthetic templates
@@ -284,9 +297,16 @@ step) and on demand (Tidy, 800 iterations). Real optimisation remains the engine
   as acidic protons vs Grignard reagents, SN2 substitution pattern, directing effects). No
   conditions, amounts or procedures are generated, so the `ReactionRecord` provenance gate is not
   bypassed; a `TargetScreener` that does not permit the target yields no route at all.
-- The Retro tab shows routes with precursors tagged as building block / small fragment /
-  intermediate / not resolved, an "open" button that loads any precursor into the editor, and
-  bond highlighting per step. The best route is also handed to the assistant report so questions
+- Each step carries a `StepBalance` (Hill formulas of the drawn species, the element difference
+  Σ reactants − product split into "released", e.g. H2O, and "supplied by a reagent", e.g. H2,
+  and the atom economy as product mass over reactant mass) and the template's mechanism class,
+  condition class and what leaves the reaction. After the search the planner draws every distinct
+  structure of the returned routes once through `ChemistryEngine.depict()` (RDKit SVG, hydrogens
+  removed, fresh 2D coordinates; WASM `get_svg`, server `/depict`).
+- The Retro tab shows routes as reaction schemes: structures with name, formula and molar mass,
+  the arrow annotated with reagents and conditions, the balanced equation, a facts table and the
+  caveats. "Open in tab" loads any precursor into a new molecule tab; tapping the step title
+  highlights the bond it forms. The best route is also handed to the assistant report so questions
   such as "how would I make it?" are answered from it.
 
 ## 5. Dependencies
@@ -358,9 +378,9 @@ surface minimal.
 | --------------------------------------- | ----- | --------------------------------------------------------------------- |
 | `packages/molecule-model` (vitest)      | 114   | periodic table, pure edit ops, conformers, validation rules, formula/weight, implicit H, JSON round trips and malformed input, vector maths, atom placement, MOL V2000 read/write, SDF and format detection, sketch clean-up (methane, ring closure, aromatic planarity, twisted double bond, 2D lifting, fixed atoms), perception (rings, cycles, functional groups), id-collision regression, transforms (mirror handedness, bond rotation dihedral, centre inversion), Joback group assignment and estimates (published acetone example, explicit vs implicit H, ring/aromatic and multi-atom groups, CH2 increment, refusal for uncovered atoms), Girolami density |
 | `packages/chem-core` (pytest)           | 12    | schema round trip, RDKit bridge round trip, aromatic handling, engine validation, computed properties, samples validity |
-| `apps/web` (vitest)                     | 65    | scene builder ↔ graph synchronisation, picking, selection, measurements, editor commands, undo/redo history, RDKit WASM engine (real wasm in node) incl. SMILES round trip, remote engine with a fake server, analysis report + rule suggestions, suggestion validation/application (incl. injected operations), template and remote explainers, mock retrosynthesis and provenance policy, fragment library validity and attachment, stereo via real RDKit WASM (mirror flips all labels, single-centre inversion, E/Z flip, unassigned centre), ESOL breakdown and composite predictions (Joback/Girolami/acid-base client-side, QED server-side, water refused by Joback), rule sets, assistant estimates/observations/question answering, question forwarding to the server explainer, synthesis planner with real RDKit WASM (one-step ester, multi-step routes, aromatic and coupling templates, screener, precursor validity for every template) |
-| `tests/e2e` (Playwright)                | 15    | built page in Chromium: open-ended building with ring closure and undo/redo, drag, RDKit properties and valence errors, SMILES/MOL/SDF/JSON import-export round trip, blocked invalid import, assistant suggestions/explanations, mock retro with reaction notes, visual smoke (pixel statistics + screenshot attachment), display styles and hidden hydrogens, stereo labels with mirror, building a new compound from fragments with estimates, property breakdowns with reasoning, assistant Q&A and the aspirin synthesis plan, fragment search and attach-from-SMILES |
-| `services/api` (pytest)                 | 13    | health, validation errors with atom ids, computed properties, 409 on unsanitisable input, 422 on bad schema, optimisation, SMILES round trip with stereo, garbage SMILES, AI endpoint disabled by default and with a fake provider (with and without a question), stereo and estimates |
+| `apps/web` (vitest)                     | 70    | scene builder ↔ graph synchronisation, picking, selection, measurements, editor commands, undo/redo history, RDKit WASM engine (real wasm in node) incl. SMILES round trip, remote engine with a fake server, analysis report + rule suggestions, suggestion validation/application (incl. injected operations), template and remote explainers, mock retrosynthesis and provenance policy, fragment library validity and attachment, stereo via real RDKit WASM (mirror flips all labels, single-centre inversion, E/Z flip, unassigned centre), ESOL breakdown and composite predictions (Joback/Girolami/acid-base client-side, QED server-side, water refused by Joback), rule sets, assistant estimates/observations/question answering, question forwarding to the server explainer, synthesis planner with real RDKit WASM (one-step ester, multi-step routes, aromatic and coupling templates, screener, precursor validity for every template, step balance/atom economy/depictions), workspace file round trip and pristine-tab logic |
+| `tests/e2e` (Playwright)                | 16    | built page in Chromium: open-ended building with ring closure and undo/redo, drag, RDKit properties and valence errors, SMILES/MOL/SDF/JSON import-export round trip, blocked invalid import, assistant suggestions/explanations, mock retro with reaction notes, visual smoke (pixel statistics + screenshot attachment), display styles and hidden hydrogens, stereo labels with mirror, building a new compound from fragments with estimates, property breakdowns with reasoning, assistant Q&A and the aspirin synthesis plan, fragment search and attach-from-SMILES, reaction schemes with depictions and balanced equations, precursor tabs, workspace export |
+| `services/api` (pytest)                 | 14    | health, validation errors with atom ids, computed properties, 409 on unsanitisable input, 422 on bad schema, optimisation, SMILES round trip with stereo, garbage SMILES, AI endpoint disabled by default and with a fake provider (with and without a question), stereo and estimates, SVG depiction |
 
 End-to-end checks of the built page (tap to add, attach, bond, undo/redo, inspector edits, delete,
 drag) are run with headless Chromium during development; a committed Playwright suite is planned

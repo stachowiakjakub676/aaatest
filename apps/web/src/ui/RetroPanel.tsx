@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { DisconnectionCandidate, Provenance, ReactionRecord, Reagent, ReagentRole, TargetAnalysis } from "../retro/types";
 import { validateReactionRecord } from "../retro/types";
-import type { Precursor, SynthesisPlan, SynthesisRoute } from "../retro/synthesis";
+import type { Precursor, SynthesisPlan, SynthesisRoute, SynthesisStep } from "../retro/synthesis";
 
 export interface RetroPanelProps {
   serviceLabel: string;
@@ -26,16 +26,32 @@ export interface RetroPanelProps {
   onHighlightBonds(bondIds: string[]): void;
 }
 
-function PrecursorChip({ p, onOpen }: { p: Precursor; onOpen(p: Precursor): void }) {
+function Structure({ p, onOpen, role }: { p: Precursor; onOpen(p: Precursor): void; role: "reactant" | "product" }) {
   const tag = p.status === "building-block" ? "building block" : p.status === "small-fragment" ? "small fragment" : p.status === "unresolved" ? "not resolved" : "intermediate";
   return (
-    <span className={`precursor ${p.status}`} title={`${p.formula} · ${tag}${p.name ? ` · ${p.name}` : ""}`}>
-      <span className="mono">{p.name ?? p.smiles ?? p.formula}</span>
-      <span className="precursor-tag">{tag}</span>
-      <button type="button" className="btn btn-tiny" onClick={() => onOpen(p)} title="Open this structure in the editor (replaces the current molecule; export it first if you want to keep it)">
-        open
-      </button>
-    </span>
+    <figure className={`structure ${p.status} ${role}`}>
+      {p.svg ? <div className="structure-svg" dangerouslySetInnerHTML={{ __html: p.svg }} /> : <div className="structure-svg structure-missing mono">{p.smiles ?? p.formula}</div>}
+      <figcaption>
+        <span className="structure-name">{p.name ?? p.smiles ?? p.formula}</span>
+        <span className="mono structure-formula">{p.formula}{p.molarMass !== null ? ` · ${p.molarMass.toFixed(1)} g/mol` : ""}</span>
+        <span className="structure-tag">{tag}</span>
+        <button type="button" className="btn btn-tiny" onClick={() => onOpen(p)} title="Open this structure in a new molecule tab">
+          open in tab
+        </button>
+      </figcaption>
+    </figure>
+  );
+}
+
+function Equation({ st }: { st: SynthesisStep }) {
+  const b = st.balance;
+  return (
+    <p className="equation mono">
+      {b.reactants.join(" + ")}
+      {b.supplied ? ` + ${b.supplied}` : ""} → {b.product}
+      {b.released ? ` + ${b.released}` : ""}
+      {b.atomEconomy !== null ? <span className="muted">   atom economy {b.atomEconomy} %</span> : null}
+    </p>
   );
 }
 
@@ -48,24 +64,58 @@ function RouteView({ route, rank, onOpen, onHighlight }: { route: SynthesisRoute
         </strong>
         <span className="tag tag-predicted mono">score {route.score}</span>
       </div>
+      <p className="hint">
+        Starting materials: {route.startingMaterials.map((p) => p.name ?? p.smiles ?? p.formula).join(", ")}
+        {route.unresolved.length ? `; not resolved: ${route.unresolved.map((p) => p.smiles ?? p.formula).join(", ")}` : ""}.
+      </p>
       <ol className="route-steps">
         {route.steps.map((st) => (
-          <li key={st.index} className="route-step" onClick={() => onHighlight(st.bondIds)} role="button" tabIndex={0}>
-            <div className="route-reaction">
-              <strong>{st.template.name}</strong> <span className="hint">({st.template.kind === "fgi" ? "functional-group change" : "bond formation"})</span>
+          <li key={st.index} className="route-step">
+            <div className="route-reaction" onClick={() => onHighlight(st.bondIds)} role="button" tabIndex={0} title="Highlight the bond this step forms in the viewport">
+              <strong>
+                Step {st.index}: {st.template.name}
+              </strong>{" "}
+              <span className="hint">({st.template.kind === "fgi" ? "functional-group change" : "bond formation"})</span>
             </div>
-            <div className="route-line">
+            <div className="scheme">
               {st.reactants.map((p, i) => (
-                <span key={i}>
-                  {i > 0 && <span className="route-plus"> + </span>}
-                  <PrecursorChip p={p} onOpen={onOpen} />
+                <span key={i} className="scheme-item">
+                  {i > 0 && <span className="scheme-op">+</span>}
+                  <Structure p={p} onOpen={onOpen} role="reactant" />
                 </span>
               ))}
-              {st.reagents.length > 0 && <span className="route-reagents mono"> [{st.reagents.join(", ")}]</span>}
-              <span className="route-arrow"> → </span>
-              <PrecursorChip p={st.product} onOpen={onOpen} />
+              <span className="scheme-arrow">
+                <span className="scheme-over">{[...st.reagents, st.template.conditions].join(" · ")}</span>
+                <span className="scheme-line">⟶</span>
+                <span className="scheme-under">{st.template.name}</span>
+              </span>
+              <Structure p={st.product} onOpen={onOpen} role="product" />
             </div>
-            <p className="hint">Reagent class: {st.template.reagentClass}. {st.template.reference}.</p>
+            <Equation st={st} />
+            <table className="step-facts">
+              <tbody>
+                <tr>
+                  <td>Mechanism</td>
+                  <td>{st.template.mechanism}</td>
+                </tr>
+                <tr>
+                  <td>Reagents (class)</td>
+                  <td>{st.template.reagentClass}</td>
+                </tr>
+                <tr>
+                  <td>Conditions (class)</td>
+                  <td>{st.template.conditions}</td>
+                </tr>
+                <tr>
+                  <td>Leaves as</td>
+                  <td>{st.template.byproducts}</td>
+                </tr>
+                <tr>
+                  <td>Reference</td>
+                  <td>{st.template.reference}</td>
+                </tr>
+              </tbody>
+            </table>
             {st.notes.map((n, i) => (
               <p key={i} className="hint warn-text">
                 {n}
@@ -299,7 +349,7 @@ export function RetroPanel(props: RetroPanelProps) {
         <h2 className="panel-title">
           Simplest synthesis <span className="tag tag-predicted">predicted</span>
         </h2>
-        <p className="hint">Textbook reaction templates searched up to three steps back to common building blocks; each step names the reaction class and reagent class only. {props.plannerLabel}.</p>
+        <p className="hint">Textbook reaction templates searched up to three steps back to common building blocks. Each step is shown as a reaction scheme with the balanced equation, mechanism class, reagent and condition classes and what leaves the reaction; no quantities or procedures. {props.plannerLabel}.</p>
         <div className="button-row">
           <button id="btn-plan" type="button" className="btn" onClick={props.onPlan} disabled={!props.hasAtoms || props.planning}>
             {props.planning ? "Planning…" : "Plan synthesis"}
@@ -316,7 +366,7 @@ export function RetroPanel(props: RetroPanelProps) {
             {props.plan.routes.map((r, i) => (
               <RouteView key={i} route={r} rank={i + 1} onOpen={props.onOpenPrecursor} onHighlight={props.onHighlightBonds} />
             ))}
-            <p className="hint">{props.plan.disclaimer} Model: {props.plan.model}. Tap a step to highlight the bond it forms.</p>
+            <p className="hint">{props.plan.disclaimer} Model: {props.plan.model}. Tap a step title to highlight the bond it forms; “open in tab” loads a structure without losing the current one.</p>
           </>
         )}
       </section>

@@ -15,7 +15,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from chem_core import basic_properties, estimates, molecule_from_dict, molecule_from_smiles, molecule_to_dict, molecule_to_smiles, stereo_info, validate_molecule
+from chem_core import basic_properties, depict_svg, estimates, molecule_from_dict, molecule_from_smiles, molecule_to_dict, molecule_to_smiles, stereo_info, validate_molecule
 from chem_core.geometry import optimize_geometry
 from chem_core.schema import SchemaError
 
@@ -40,6 +40,11 @@ app.add_middleware(
 
 class MoleculeRequest(BaseModel):
     molecule: dict[str, Any]
+
+
+class DepictRequest(MoleculeRequest):
+    width: int = Field(default=220, ge=40, le=2000)
+    height: int = Field(default=150, ge=40, le=2000)
 
 
 class OptimizeRequest(MoleculeRequest):
@@ -167,3 +172,13 @@ def estimates_endpoint(req: MoleculeRequest) -> dict:
     if not result["valid"]:
         raise HTTPException(status_code=409, detail={"message": "Structure does not sanitise; fix validation errors first.", "validation": result})
     return {"kind": "predicted", "items": estimates(mol)}
+
+
+@app.post("/depict")
+def depict(req: DepictRequest) -> dict:
+    """2D depiction (SVG) of the structure: hydrogens removed, fresh 2D coordinates."""
+    mol = _parse(req.molecule)
+    result = validate_molecule(mol)
+    if not result["valid"]:
+        raise HTTPException(status_code=409, detail={"message": "Structure does not sanitise; fix validation errors first.", "validation": result})
+    return {"kind": "computed", "svg": depict_svg(mol, req.width, req.height)}

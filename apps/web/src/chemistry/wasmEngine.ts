@@ -5,7 +5,7 @@
  */
 import { cleanupGeometry, molecularWeight, parseMolfile, writeMolfile } from "@molecular-cad/molecule-model";
 import type { Molecule } from "@molecular-cad/molecule-model";
-import type { ChemistryEngine, ComputedProperties, Descriptor, EngineIssue, EngineValidation, FromSmilesOptions, FromSmilesResult, OptimizedGeometry, Prediction, StereoInfo } from "./engine";
+import type { ChemistryEngine, ComputedProperties, DepictOptions, Descriptor, EngineIssue, EngineValidation, FromSmilesOptions, FromSmilesResult, OptimizedGeometry, Prediction, StereoInfo } from "./engine";
 import { EngineError } from "./engine";
 
 // Minimal structural typing of the parts of the RDKit JS API we use.
@@ -20,6 +20,7 @@ export interface RDKitMol {
   add_hs_in_place(): boolean;
   remove_hs_in_place(): boolean;
   set_new_coords(): boolean;
+  get_svg(width: number, height: number): string;
   delete(): void;
 }
 export interface RDKitLog {
@@ -95,7 +96,7 @@ export function browserRDKitLoader(baseUrl = "./rdkit/"): RDKitLoader {
 export class WasmRdkitEngine implements ChemistryEngine {
   readonly id = "rdkit-wasm";
   readonly label = "RDKit in browser (WebAssembly)";
-  readonly capabilities = { validate: true, properties: true, optimizeGeometry: false, smiles: true, stereo: true, estimates: false };
+  readonly capabilities = { validate: true, properties: true, optimizeGeometry: false, smiles: true, stereo: true, estimates: false, depict: true };
   private modulePromise: Promise<RDKitModule> | null = null;
   private version = "";
   private log: RDKitLog | null = null;
@@ -265,6 +266,20 @@ export class WasmRdkitEngine implements ChemistryEngine {
 
   async estimates(): Promise<Prediction[]> {
     return []; // QED / SA score need the server engine; ESOL runs client-side in predictions.ts
+  }
+
+  /** 2D depiction: hydrogens dropped, fresh 2D coordinates, RDKit's SVG drawer. */
+  async depict(mol: Molecule, opts: DepictOptions = {}): Promise<string> {
+    if (mol.atoms.length === 0) throw new EngineError("Empty molecule.");
+    const { rd, error } = await this.parse(mol);
+    if (!rd) throw new EngineError("Structure does not sanitise; fix validation errors first.", { valid: false, issues: issuesFromLog(error, mol) });
+    try {
+      rd.remove_hs_in_place();
+      rd.set_new_coords();
+      return rd.get_svg(opts.width ?? 220, opts.height ?? 150);
+    } finally {
+      rd.delete();
+    }
   }
 }
 

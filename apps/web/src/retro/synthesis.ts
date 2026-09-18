@@ -10,7 +10,7 @@
  * screener and the provenance policy from `types.ts` still apply: for a target the deployment's
  * screener does not permit, no route is produced.
  */
-import { addAtom, addBond, bondInRing, bondsOfAtom, connectedComponents, getAtom, implicitHydrogenCount, molecularFormula, neighborsOf, placeBondedAtom, removeAtom, removeBond, setBondOrder, updateAtom, validateMolecule } from "@molecular-cad/molecule-model";
+import { addAtom, addBond, bondInRing, bondsOfAtom, connectedComponents, elementCounts, getAtom, hillOrder, implicitHydrogenCount, molecularFormula, molecularWeight, neighborsOf, placeBondedAtom, removeAtom, removeBond, setBondOrder, updateAtom, validateMolecule } from "@molecular-cad/molecule-model";
 import type { AtomId, BondId, Molecule } from "@molecular-cad/molecule-model";
 import { aromaticAtoms } from "../chemistry/predictions";
 import { BUILDING_BLOCKS } from "./buildingBlocks";
@@ -33,6 +33,12 @@ export interface ReactionTemplate {
   /** Reliability cost added to the route score (0 = routine, 1 = often problematic). */
   penalty: number;
   caveats: string[];
+  /** Mechanism class (textbook label). */
+  mechanism: string;
+  /** Typical conditions at class level: no quantities, no procedure. */
+  conditions: string;
+  /** What leaves the reaction besides the product (class level). */
+  byproducts: string;
 }
 
 export interface RetroMove {
@@ -51,11 +57,25 @@ export type PrecursorStatus = "building-block" | "small-fragment" | "intermediat
 export interface Precursor {
   molecule: Molecule;
   smiles: string | null;
+  /** 2D depiction (SVG) when the engine can draw; filled in for the returned routes only. */
+  svg: string | null;
+  molarMass: number | null;
   formula: string;
   heavyAtomCount: number;
   status: PrecursorStatus;
   /** Name from the building-block list, when known. */
   name: string | null;
+}
+
+export interface StepBalance {
+  /** Hill formulas of the drawn reactants and the product. */
+  reactants: string[];
+  product: string;
+  /** Element difference Σ reactants − product, e.g. "H2O" (released) and "H2" (must come from a reagent). */
+  released: string | null;
+  supplied: string | null;
+  /** Product mass / total reactant mass, in %. Null when a molar mass is unknown. */
+  atomEconomy: number | null;
 }
 
 export interface SynthesisStep {
@@ -66,6 +86,7 @@ export interface SynthesisStep {
   product: Precursor;
   bondIds: BondId[];
   notes: string[];
+  balance: StepBalance;
 }
 
 export interface SynthesisRoute {
@@ -236,7 +257,39 @@ function hasAcidicProtons(m: Molecule, except: AtomId[] = []): string[] {
 // Templates
 // ---------------------------------------------------------------------------
 
-const T = (t: Omit<ReactionTemplate, "caveats"> & { caveats?: string[] }): ReactionTemplate => ({ caveats: [], ...t });
+type TemplateExtra = Pick<ReactionTemplate, "mechanism" | "conditions" | "byproducts">;
+const EXTRA: Record<string, TemplateExtra> = {
+  "fischer-ester": { mechanism: "nucleophilic acyl substitution (acid-catalysed addition–elimination)", conditions: "catalytic strong acid, heat, excess alcohol or water removal", byproducts: "water" },
+  "amide-coupling": { mechanism: "nucleophilic acyl substitution via an activated acid (acyl chloride or O-acylisourea)", conditions: "room temperature, aprotic solvent, a tertiary amine base", byproducts: "water (as the urea or as the salt of the base with HCl)" },
+  williamson: { mechanism: "SN2 of the alkoxide/phenoxide on the alkyl halide", conditions: "base (hydride or carbonate), polar aprotic solvent, mild heat", byproducts: "halide salt" },
+  "thiolate-alkylation": { mechanism: "SN2 of the thiolate on the alkyl halide", conditions: "base, polar solvent, room temperature", byproducts: "halide salt" },
+  "reductive-amination": { mechanism: "imine/iminium formation then hydride reduction", conditions: "mild acid, a borohydride-type reductant, room temperature", byproducts: "water; hydride is consumed" },
+  "buchwald-hartwig": { mechanism: "Pd(0)/Pd(II) cross-coupling: oxidative addition, amine binding, reductive elimination", conditions: "palladium catalyst with a phosphine ligand, strong base, heat under inert atmosphere", byproducts: "halide salt of the base" },
+  grignard: { mechanism: "nucleophilic addition of the organomagnesium to the carbonyl carbon", conditions: "dry ether or THF under inert atmosphere, then aqueous work-up", byproducts: "magnesium halide salts on work-up" },
+  "grignard-co2": { mechanism: "nucleophilic addition of the organomagnesium to CO2", conditions: "dry ether or THF, solid CO2, then aqueous acid", byproducts: "magnesium halide salts on work-up" },
+  "carbonyl-reduction": { mechanism: "hydride addition to the carbonyl carbon", conditions: "borohydride in an alcohol solvent, room temperature", byproducts: "borate salts; hydride is consumed" },
+  "alcohol-oxidation": { mechanism: "oxidation via an alkoxy-oxidant intermediate and elimination", conditions: "stoichiometric oxidant, aprotic solvent, low to room temperature", byproducts: "reduced oxidant; two hydrogens are removed" },
+  "acid-from-alcohol": { mechanism: "two consecutive oxidations via the aldehyde and its hydrate", conditions: "strong oxidant in aqueous acid, heat", byproducts: "reduced oxidant" },
+  "nitrile-hydrolysis": { mechanism: "nucleophilic addition of water to the nitrile, via the amide", conditions: "aqueous acid or base, prolonged heating", byproducts: "ammonia (or ammonium salt)" },
+  "cyanide-sn2": { mechanism: "SN2 of cyanide on the alkyl halide", conditions: "alkali cyanide, polar aprotic solvent, heat", byproducts: "halide salt" },
+  sandmeyer: { mechanism: "diazotisation, then copper(I)-mediated radical substitution", conditions: "nitrite in cold aqueous acid, then the copper(I) salt", byproducts: "nitrogen gas" },
+  wittig: { mechanism: "[2+2] addition of the ylide to the carbonyl, oxaphosphetane collapse", conditions: "strong base to form the ylide, aprotic solvent, low to room temperature", byproducts: "triphenylphosphine oxide" },
+  dehydration: { mechanism: "E1 (acid) or E2 (base on the halide)", conditions: "strong acid with heating, or strong base with the halide", byproducts: "water (or halide salt)" },
+  "alkynide-alkylation": { mechanism: "deprotonation then SN2 of the acetylide", conditions: "strong base in ammonia or THF, then the primary halide", byproducts: "halide salt" },
+  nitration: { mechanism: "electrophilic aromatic substitution by the nitronium ion", conditions: "mixed nitric/sulfuric acid, cooled", byproducts: "water" },
+  "aromatic-halogenation": { mechanism: "electrophilic aromatic substitution", conditions: "halogen with an iron(III) or aluminium halide catalyst, room temperature", byproducts: "hydrogen halide" },
+  sulfonation: { mechanism: "electrophilic aromatic substitution by SO3", conditions: "fuming sulfuric acid, heat", byproducts: "water" },
+  "nitro-reduction": { mechanism: "stepwise reduction via nitroso and hydroxylamine", conditions: "hydrogen over a palladium catalyst, or iron/tin in acid", byproducts: "water" },
+  "friedel-crafts-acylation": { mechanism: "electrophilic aromatic substitution by the acylium ion", conditions: "stoichiometric aluminium chloride, dry solvent, then aqueous work-up", byproducts: "hydrogen chloride" },
+  "friedel-crafts-alkylation": { mechanism: "electrophilic aromatic substitution by a carbocation", conditions: "catalytic aluminium chloride, dry solvent", byproducts: "hydrogen chloride" },
+  suzuki: { mechanism: "Pd(0)/Pd(II) cross-coupling: oxidative addition, transmetalation, reductive elimination", conditions: "palladium catalyst, aqueous base, heat under inert atmosphere", byproducts: "boric acid and halide salts" },
+  sulfonamide: { mechanism: "nucleophilic substitution at sulfur", conditions: "base, aprotic solvent, room temperature", byproducts: "hydrogen chloride (as the salt of the base)" },
+  aldol: { mechanism: "enolate addition to the carbonyl", conditions: "catalytic base, cold, or a preformed enolate at low temperature", byproducts: "none (addition)" },
+  "aldol-condensation": { mechanism: "enolate addition then E1cB dehydration", conditions: "base with heating", byproducts: "water" },
+  "halide-from-alcohol": { mechanism: "SN1/SN2 on the protonated or activated alcohol", conditions: "concentrated hydrogen halide, or a phosphorus/thionyl halide", byproducts: "water (or phosphorous/sulfur oxides)" },
+  epoxidation: { mechanism: "concerted oxygen transfer from the peroxy acid", conditions: "peroxy acid in a chlorinated solvent, cold", byproducts: "the carboxylic acid of the peracid" },
+};
+const T = (t: Omit<ReactionTemplate, "caveats" | keyof TemplateExtra> & { caveats?: string[] }): ReactionTemplate => ({ caveats: [], ...(EXTRA[t.id] ?? { mechanism: "not classified", conditions: "not specified", byproducts: "not specified" }), ...t });
 
 const TEMPLATES = {
   ester: T({ id: "fischer-ester", name: "Fischer esterification", kind: "disconnection", reagentClass: "carboxylic acid + alcohol with an acid catalyst; or the acyl chloride/anhydride + alcohol with a base", description: "Forms the ester C(=O)–O bond.", reference: "Clayden et al., Organic Chemistry, ch. 10", penalty: 0.2, caveats: ["Equilibrium reaction: needs excess alcohol or water removal; hindered (tertiary) alcohols react poorly."] }),
@@ -678,6 +731,7 @@ export class RuleBasedSynthesisPlanner implements SynthesisPlanner {
   constructor(
     private readonly smilesOf: ((mol: Molecule) => Promise<string>) | null,
     private readonly screener: TargetScreener = NO_SCREENER,
+    private readonly depictOf: ((mol: Molecule) => Promise<string>) | null = null,
   ) {}
 
   private async describe(mol: Molecule, status: PrecursorStatus): Promise<Precursor> {
@@ -695,7 +749,7 @@ export class RuleBasedSynthesisPlanner implements SynthesisPlanner {
     const name = key ? (BUILDING_BLOCKS.get(key) ?? null) : null;
     const heavyAtomCount = mol.atoms.filter((a) => a.element !== "H").length;
     const finalStatus: PrecursorStatus = name ? "building-block" : status === "intermediate" ? "intermediate" : heavyAtomCount <= SMALL_FRAGMENT ? "small-fragment" : status;
-    return { molecule: mol, smiles, formula: molecularFormula(mol, { includeImplicitHydrogens: true }), heavyAtomCount, status: finalStatus, name };
+    return { molecule: mol, smiles, svg: null, molarMass: molecularWeight(mol, { includeImplicitHydrogens: true }).value ?? null, formula: molecularFormula(mol, { includeImplicitHydrogens: true }), heavyAtomCount, status: finalStatus, name };
   }
 
   private keyOf(p: Precursor): string {
@@ -754,7 +808,31 @@ export class RuleBasedSynthesisPlanner implements SynthesisPlanner {
     }
     roots.sort((a, b) => a.cost - b.cost);
     const routes = dedupeRoutes(roots.map((r) => toRoute(r))).slice(0, 3);
+    await this.depictRoutes(routes);
     return { ...base, searched: this.searched, routes, reason: null };
+  }
+
+  /** Draw every distinct structure of the returned routes once (shared by key). */
+  private async depictRoutes(routes: SynthesisRoute[]): Promise<void> {
+    if (!this.depictOf) return;
+    const cache = new Map<string, string | null>();
+    const draw = async (p: Precursor) => {
+      const key = this.keyOf(p);
+      if (!cache.has(key)) {
+        try {
+          cache.set(key, await this.depictOf!(p.molecule));
+        } catch {
+          cache.set(key, null);
+        }
+      }
+      p.svg = cache.get(key) ?? null;
+    };
+    for (const r of routes) {
+      for (const st of r.steps) {
+        for (const p of st.reactants) await draw(p);
+        await draw(st.product);
+      }
+    }
   }
 }
 
@@ -782,7 +860,8 @@ function toRoute(root: Node): SynthesisRoute {
       return;
     }
     for (const c of n.children) walk(c);
-    steps.push({ index: steps.length + 1, template: n.move.template, reactants: n.children.map((c) => c.precursor), reagents: n.move.reagents, product: n.precursor, bondIds: n.move.bondIds, notes: [...n.move.notes, ...n.move.template.caveats] });
+    const reactants = n.children.map((c) => c.precursor);
+    steps.push({ index: steps.length + 1, template: n.move.template, reactants, reagents: n.move.reagents, product: n.precursor, bondIds: n.move.bondIds, notes: [...n.move.notes, ...n.move.template.caveats], balance: stepBalance(reactants, n.precursor) });
   };
   walk(root);
   const notes: string[] = [];
@@ -801,8 +880,28 @@ function dedupeRoutes(routes: SynthesisRoute[]): SynthesisRoute[] {
   });
 }
 
+/** Element balance and atom economy of one step (drawn species only; reagents are class-level). */
+export function stepBalance(reactants: Precursor[], product: Precursor): StepBalance {
+  const diff = new Map<string, number>();
+  for (const r of reactants) for (const [el, n] of elementCounts(r.molecule, { includeImplicitHydrogens: true })) diff.set(el, (diff.get(el) ?? 0) + n);
+  for (const [el, n] of elementCounts(product.molecule, { includeImplicitHydrogens: true })) diff.set(el, (diff.get(el) ?? 0) - n);
+  const fmt = (sign: 1 | -1) => {
+    const parts = hillOrder([...diff].filter(([, n]) => Math.sign(n) === sign).map(([el]) => el)).map((el) => `${el}${Math.abs(diff.get(el)!) > 1 ? Math.abs(diff.get(el)!) : ""}`);
+    return parts.length ? parts.join("") : null;
+  };
+  const masses = reactants.map((r) => r.molarMass);
+  const total = masses.every((m): m is number => m !== null) ? masses.reduce((a, b) => a + b, 0) : null;
+  return {
+    reactants: reactants.map((r) => r.formula),
+    product: product.formula,
+    released: fmt(1),
+    supplied: fmt(-1),
+    atomEconomy: total && product.molarMass !== null ? Math.round((100 * product.molarMass) / total) : null,
+  };
+}
+
 /** Human-readable forward sentences for the assistant report. */
 export function describeRoute(route: SynthesisRoute): string[] {
   const label = (p: Precursor) => (p.name ? `${p.name} (${p.smiles ?? p.formula})` : p.smiles ?? p.formula);
-  return route.steps.map((s) => `Step ${s.index}: ${s.reactants.map(label).join(" + ")}${s.reagents.length ? ` [${s.reagents.join(", ")}]` : ""} → ${label(s.product)} via ${s.template.name.toLowerCase()} (${s.template.reagentClass}).`);
+  return route.steps.map((s) => `Step ${s.index}: ${s.reactants.map(label).join(" + ")}${s.reagents.length ? ` [${s.reagents.join(", ")}]` : ""} → ${label(s.product)}${s.balance.released ? ` + ${s.balance.released}` : ""} via ${s.template.name.toLowerCase()} (${s.template.mechanism}; ${s.template.conditions}).`);
 }

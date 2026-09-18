@@ -4,7 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 // Playwright transpiles these files as CommonJS, so __dirname is available.
-export const APP_URL = pathToFileURL(path.resolve(__dirname, "../../apps/web/dist/molecular-cad.html")).href;
+export const APP_URL = pathToFileURL(path.resolve(__dirname, "../../apps/web/dist/clapeyron.html")).href;
 
 export interface AppErrors {
   list: string[];

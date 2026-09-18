@@ -39,7 +39,7 @@ test("assistant answers questions from the report and the planner finds the aspi
   await expect(page.locator("#synthesis")).toContainText("acetic acid");
   await expect(page.locator("#synthesis")).toContainText("common building block");
   // Tapping a step highlights the ester bond in the viewport; the assistant now knows the route.
-  await page.locator(".route-step").first().click();
+  await page.locator(".route-reaction").first().click();
   await expect(page.locator(".statusbar")).toContainText("1 bond");
   await page.click("#tab-assistant");
   await page.getByRole("button", { name: "How would I make it?" }).click();
@@ -62,5 +62,39 @@ test("fragment search and attach-from-SMILES extend the library without limit", 
   await page.click("#btn-attach-smiles");
   await expect(page.locator(".statusbar")).toContainText("Attach C(=O)NC", { timeout: 20_000 });
   expect(await panelText(page)).toContain("C8H9NO"); // N-methylbenzamide
+  expect(errors.list).toEqual([]);
+});
+
+test("reaction schemes are drawn and precursors open in new tabs without losing the target", async ({ page }) => {
+  const errors = await openApp(page);
+  await page.selectOption("#sample-select", "aspirin");
+  await expect(page.locator(".doc-tabs [role=tab]")).toHaveCount(1);
+  await page.click("#tab-retro");
+  await page.click("#btn-plan");
+  await expect(page.locator("#synthesis .route").first()).toBeVisible({ timeout: 30_000 });
+  // The scheme shows RDKit depictions, the balanced equation and the mechanism class.
+  await expect(page.locator("#synthesis .structure-svg svg").first()).toBeVisible();
+  await expect(page.locator("#synthesis .equation").first()).toContainText("C2H4O2 + C7H6O3 → C9H8O4 + H2O");
+  await expect(page.locator("#synthesis .equation").first()).toContainText("atom economy");
+  await expect(page.locator("#synthesis .step-facts").first()).toContainText("nucleophilic acyl substitution");
+  // Open the first reactant in a new tab: aspirin stays open in its own tab.
+  await page.locator("#synthesis .structure.reactant button").first().click();
+  await expect(page.locator(".doc-tabs [role=tab]")).toHaveCount(2);
+  await expect(page.locator(".doc-tabs [role=tab][aria-selected=true]")).toContainText(/acetic acid|salicylic acid/);
+  await page.locator(".doc-tabs [role=tab]").first().click();
+  await expect(page.locator(".doc-tabs [role=tab][aria-selected=true]")).toContainText("Aspirin");
+  await page.click("#tab-inspect");
+  expect(await panelText(page)).toContain("C9H8O4");
+  // Closing the precursor tab leaves aspirin alone; "+" opens an empty tab.
+  await page.locator(".doc-tabs [role=tab]").nth(1).locator(".doc-tab-close").click();
+  await expect(page.locator(".doc-tabs [role=tab]")).toHaveCount(1);
+  await page.click(".doc-tab-new");
+  await expect(page.locator(".doc-tabs [role=tab]")).toHaveCount(2);
+  await expect(page.locator(".viewport-empty")).toBeVisible();
+  // The workspace export lists both molecules.
+  await page.keyboard.press("Control+s");
+  await page.selectOption("#export-format", "workspace");
+  await expect(page.locator("#export-text")).toHaveValue(/clapeyron-workspace/);
+  await expect(page.locator("#export-text")).toHaveValue(/Aspirin/);
   expect(errors.list).toEqual([]);
 });

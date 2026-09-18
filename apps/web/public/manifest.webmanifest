@@ -1,7 +1,7 @@
 {
-  "name": "Molecular CAD",
-  "short_name": "MolCAD",
-  "description": "CAD-like 3D molecular editor with RDKit in the browser",
+  "name": "Clapeyron",
+  "short_name": "Clapeyron",
+  "description": "Clapeyron: CAD-like 3D molecular design with RDKit in the browser",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

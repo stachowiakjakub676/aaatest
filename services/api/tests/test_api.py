@@ -179,3 +179,11 @@ def test_stereo_from_3d_and_estimates():
     assert 0.5 < items["qed"]["value"] < 0.6
     assert items["qed"]["kind"] == "predicted" and "Bickerton" in items["qed"]["model"]
     assert 1 < items["sa-score"]["value"] < 3
+
+
+def test_depict_returns_svg():
+    r = client.post("/depict", json={"molecule": sample("aspirin"), "width": 200, "height": 120})
+    assert r.status_code == 200
+    svg = r.json()["svg"]
+    assert svg.startswith("<?xml") or svg.lstrip().startswith("<svg")
+    assert "<svg" in svg and "</svg>" in svg

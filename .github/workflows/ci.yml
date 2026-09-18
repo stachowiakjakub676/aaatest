@@ -34,8 +34,8 @@ jobs:
           retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
-          name: molecular-cad-single-file
-          path: apps/web/dist/molecular-cad.html
+          name: clapeyron-single-file
+          path: apps/web/dist/clapeyron.html
           retention-days: 7
 
   python:

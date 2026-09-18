@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Molecular CAD",
+  "productName": "Clapeyron",
   "version": "0.1.0",
-  "identifier": "org.molecularcad.desktop",
+  "identifier": "app.clapeyron.desktop",
   "build": {
     "frontendDist": "../../web/dist",
     "devUrl": "http://localhost:5173",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Molecular CAD",
+        "title": "Clapeyron",
         "width": 1400,
         "height": 900,
         "minWidth": 900,
@@ -27,7 +27,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis", "msi", "dmg", "appimage", "deb"],
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico", "icons/icon.png"],
     "windows": {
       "nsis": { "installMode": "currentUser", "languages": ["English", "Polish"] }
     }

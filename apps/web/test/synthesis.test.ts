@@ -81,3 +81,28 @@ describe("rule-based synthesis planner", () => {
     expect(notes.some((n) => /quench/.test(n))).toBe(true);
   }, 30_000);
 });
+
+describe("reaction schemes: balance, atom economy and depictions", () => {
+  it("balances the Fischer esterification and draws every structure", async () => {
+    const p = new RuleBasedSynthesisPlanner(smilesOf, undefined, (m) => engine.depict(m, { width: 200, height: 120 }));
+    const plan = await p.plan(await fromSmiles("CCOC(=O)c1ccccc1"));
+    const step = plan.routes[0]!.steps[0]!;
+    expect(step.balance.reactants.sort()).toEqual(["C2H6O", "C7H6O2"]);
+    expect(step.balance.product).toBe("C9H10O2");
+    expect(step.balance.released).toBe("H2O");
+    expect(step.balance.supplied).toBeNull();
+    expect(step.balance.atomEconomy).toBe(89); // 150.2 / (122.1 + 46.1)
+    expect(step.template.mechanism).toMatch(/acyl substitution/);
+    expect(step.template.byproducts).toBe("water");
+    for (const s of [...step.reactants, step.product]) expect(s.svg).toMatch(/<svg/);
+    expect(describeRoute(plan.routes[0]!)[0]).toMatch(/\+ H2O via fischer esterification \(nucleophilic acyl substitution/);
+  }, 30_000);
+
+  it("reports hydrogen that a reagent must supply for a reduction", async () => {
+    const plan = await planner().plan(await fromSmiles("OC1CCCCC1")); // ring bonds are never cut: only the reduction applies
+    const red = plan.routes.flatMap((r) => r.steps).find((s) => s.template.id === "carbonyl-reduction");
+    expect(red).toBeDefined();
+    expect(red!.balance.supplied).toBe("H2");
+    expect(red!.balance.released).toBeNull();
+  }, 30_000);
+});
