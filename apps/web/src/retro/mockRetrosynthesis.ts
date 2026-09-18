@@ -1,8 +1,8 @@
 import { addAtom, addBond, bondInRing, connectedComponents, detectFunctionalGroups, getAtom, placeBondedAtom, removeBond, ringCount } from "@molecular-cad/molecule-model";
 import type { Molecule } from "@molecular-cad/molecule-model";
 import type { ChemistryEngine } from "../chemistry/engine";
-import type { DisconnectionCandidate, Fragment, RetrosynthesisService, SafetyPolicy, TargetAnalysis } from "./types";
-import { NO_OPERATIONAL_DETAILS_POLICY } from "./types";
+import type { DisconnectionCandidate, Fragment, RetrosynthesisService, SafetyPolicy, TargetAnalysis, TargetScreener } from "./types";
+import { NO_SCREENER, PROVENANCE_POLICY, applySafetyDecision } from "./types";
 
 interface Strategy {
   label: string;
@@ -39,11 +39,12 @@ export class MockRetrosynthesisService implements RetrosynthesisService {
   readonly id = "mock";
   readonly label = "Mock disconnection analysis";
   readonly disclaimer =
-    "Research abstraction only. This mock lists bonds that could conceptually be disconnected and the H-capped fragments that would result. It does not propose reagents, conditions, procedures or feasibility, and its ranking is a fixed heuristic, not a model.";
+    "Research abstraction only. This mock lists bonds that could conceptually be disconnected and the H-capped fragments that would result. It has no reaction knowledge base, so it never proposes reagents, conditions, yields or procedures; those fields can be filled from your own notes or by a future data-backed implementation, always with provenance. Ranking is a fixed heuristic, not a model.";
 
   constructor(
     private readonly engine: ChemistryEngine | null,
-    private readonly policy: SafetyPolicy = NO_OPERATIONAL_DETAILS_POLICY,
+    private readonly policy: SafetyPolicy = PROVENANCE_POLICY,
+    private readonly screener: TargetScreener = NO_SCREENER,
   ) {}
 
   async analyzeTarget(target: Molecule): Promise<TargetAnalysis> {
@@ -54,7 +55,9 @@ export class MockRetrosynthesisService implements RetrosynthesisService {
     if (heavy.length < 4) notes.push("Target is too small for a meaningful disconnection analysis.");
     if (groups.length === 0) notes.push("No functional groups recognised; only generic C–C disconnections are available.");
     if (ringCount(target) > 0) notes.push("Ring bonds are never disconnected by this mock (ring-forming strategies are out of scope).");
-    return { kind: "computed", heavyAtomCount: heavy.length, ringCount: ringCount(target), functionalGroups: groups, disconnectableBondCount: disconnectable, notes };
+    const screening = this.screener.screen(target);
+    if (!screening.permitted) notes.push(`Target screening (${screening.screener}): operational details will be withheld.`);
+    return { kind: "computed", heavyAtomCount: heavy.length, ringCount: ringCount(target), functionalGroups: groups, disconnectableBondCount: disconnectable, screening, notes };
   }
 
   private isCandidateBond(mol: Molecule, bondId: string): boolean {
@@ -95,8 +98,8 @@ export class MockRetrosynthesisService implements RetrosynthesisService {
       const balance = Math.min(...sizes) / Math.max(...sizes);
       const rationale = [`${strategy.description}`, `Fragment sizes ${sizes.join(" + ")} heavy atoms (balance ${balance.toFixed(2)}).`];
       const candidate: DisconnectionCandidate = { id: `cut-${bond.id}`, bondId: bond.id, strategy: strategy.label, description: strategy.description, fragments, score: strategy.base + balance, rank: 0, rationale };
-      const decision = this.policy.screen(candidate);
-      if (decision.allowed) out.push(candidate);
+      const decision = this.policy.screen(candidate, analysis.screening);
+      if (decision.allowed) out.push(applySafetyDecision(candidate, decision));
     }
     return out;
   }

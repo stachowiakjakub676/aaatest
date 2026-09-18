@@ -31,7 +31,8 @@ import { applySuggestion } from "./ai/suggestions";
 import { RemoteExplanationService, TemplateExplanationService } from "./ai/explanation";
 import type { Explanation, Suggestion } from "./ai/types";
 import { MockRetrosynthesisService } from "./retro/mockRetrosynthesis";
-import type { DisconnectionCandidate, TargetAnalysis } from "./retro/types";
+import type { DisconnectionCandidate, ReactionRecord, TargetAnalysis } from "./retro/types";
+import { PROVENANCE_POLICY, applySafetyDecision } from "./retro/types";
 
 type RightTab = "inspect" | "chemistry" | "assistant" | "retro";
 const TABS: Array<[RightTab, string]> = [
@@ -93,6 +94,8 @@ export function App() {
   const [retroWorking, setRetroWorking] = useState(false);
   const [retroError, setRetroError] = useState<string | null>(null);
   const [retroSelected, setRetroSelected] = useState<string | null>(null);
+  const [reactionNotes, setReactionNotes] = useState<Record<string, ReactionRecord>>({});
+  const [retroExported, setRetroExported] = useState(false);
   const viewportRef = useRef<ViewportHandle>(null);
   const dragStartRef = useRef<Molecule | null>(null);
 
@@ -119,7 +122,29 @@ export function App() {
     setRetroAnalysis(null);
     setRetroCandidates([]);
     setRetroSelected(null);
+    setReactionNotes({});
+    setRetroExported(false);
   }, [molecule]);
+
+  // Candidates as shown: user notes attached, then the safety policy applied to every record.
+  const shownCandidates = useMemo(() => {
+    if (!retroAnalysis) return [];
+    return retroCandidates.map((c) => {
+      const note = reactionNotes[c.id];
+      const withNote = note ? { ...c, reaction: note } : c;
+      return applySafetyDecision(withNote, PROVENANCE_POLICY.screen(withNote, retroAnalysis.screening));
+    });
+  }, [retroCandidates, reactionNotes, retroAnalysis]);
+
+  const exportRetroJson = useCallback(async () => {
+    const payload = { kind: "retrosynthesis-analysis", target: { id: molecule.id, name: molecule.name ?? molecule.id }, analysis: retroAnalysis, candidates: shownCandidates };
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+      setRetroExported(true);
+    } catch {
+      setNotice("Clipboard not available; use Export for the structure and copy from the panel.");
+    }
+  }, [molecule, retroAnalysis, shownCandidates]);
 
   const explain = useCallback(async () => {
     setExplaining(true);
@@ -511,7 +536,7 @@ export function App() {
             serviceLabel={retroService.label}
             disclaimer={retroService.disclaimer}
             analysis={retroAnalysis}
-            candidates={retroCandidates}
+            candidates={shownCandidates}
             working={retroWorking}
             error={retroError}
             selectedId={retroSelected}
@@ -521,6 +546,12 @@ export function App() {
               setRetroSelected(c?.id ?? null);
               setSelection(c ? { atoms: [], bonds: [c.bondId] } : EMPTY_SELECTION);
             }}
+            onSaveReaction={(id, record) => {
+              setReactionNotes((n) => ({ ...n, [id]: record }));
+              setRetroExported(false);
+            }}
+            onExportJson={() => void exportRetroJson()}
+            exported={retroExported}
           />
         )}
       </aside>

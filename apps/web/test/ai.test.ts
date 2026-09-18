@@ -8,7 +8,8 @@ import type { AnalysisInput } from "../src/ai/types";
 import { EXPLANATION_DISCLAIMER } from "../src/ai/types";
 import type { ComputedProperties } from "../src/chemistry/engine";
 import { MockRetrosynthesisService, splitAtBond } from "../src/retro/mockRetrosynthesis";
-import { FORBIDDEN_CANDIDATE_KEYS, NO_OPERATIONAL_DETAILS_POLICY } from "../src/retro/types";
+import { PROVENANCE_POLICY, applySafetyDecision, validateReactionRecord } from "../src/retro/types";
+import type { DisconnectionCandidate, ReactionRecord } from "../src/retro/types";
 import { CommandError } from "../src/editor/commands";
 
 const sample = (id: string) => getSampleMolecule(id)!;
@@ -174,10 +175,11 @@ describe("MockRetrosynthesisService", () => {
     expect(ranked.map((c) => c.rank)).toEqual(ranked.map((_, i) => i + 1));
     for (const c of ranked) {
       expect(c.fragments).toHaveLength(2);
-      for (const k of FORBIDDEN_CANDIDATE_KEYS) expect(k in c).toBe(false);
+      expect(c.reaction).toBeUndefined(); // the mock has no knowledge base and never invents reaction data
       expect(c.rationale.join(" ")).toMatch(/fixed heuristic/);
     }
-    expect(JSON.stringify(ranked)).not.toMatch(/reagent|solvent|°C|yield/i);
+    expect(analysis.screening.permitted).toBe(true);
+    expect(analysis.screening.screener).toBe("no screener configured");
   });
 
   it("never disconnects ring bonds or bonds to hydrogen", async () => {
@@ -188,8 +190,37 @@ describe("MockRetrosynthesisService", () => {
     expect(analysis.notes.join(" ")).toMatch(/Ring bonds/);
   });
 
-  it("safety policy blocks candidates carrying operational fields", () => {
-    const bad = { id: "x", bondId: "b", strategy: "s", description: "d", fragments: [], score: 1, rank: 1, rationale: [], reagents: ["..."] };
-    expect(NO_OPERATIONAL_DETAILS_POLICY.screen(bad as never).allowed).toBe(false);
+  it("provenance policy shows user/literature data, withholds unreviewed model data and screened targets", () => {
+    const base: DisconnectionCandidate = { id: "x", bondId: "b", strategy: "s", description: "d", fragments: [], score: 1, rank: 1, rationale: [] };
+    const record = (provenance: ReactionRecord["provenance"], reviewed = false): ReactionRecord => ({ reagents: [{ role: "reagent", name: "example" }], conditions: { temperature: { value: 25, unit: "C" } }, yield: { value: 80, unit: "%", type: "reported" }, procedure: "step text", provenance, reviewed });
+    const ok = { permitted: true, screener: "test" };
+    const user = { ...base, reaction: record({ source: "user" }) };
+    expect(PROVENANCE_POLICY.screen(user, ok)).toEqual({ allowed: true, redactReaction: false });
+    const lit = { ...base, reaction: record({ source: "literature", citation: "J. Example 2020" }) };
+    expect(PROVENANCE_POLICY.screen(lit, ok).redactReaction).toBe(false);
+    const model = { ...base, reaction: record({ source: "model", model: "m" }) };
+    const d = PROVENANCE_POLICY.screen(model, ok);
+    expect(d.redactReaction).toBe(true);
+    expect(applySafetyDecision(model, d).reaction).toBeUndefined();
+    expect(applySafetyDecision(model, d).rationale.join(" ")).toMatch(/reviewed/);
+    expect(PROVENANCE_POLICY.screen({ ...base, reaction: record({ source: "model", model: "m" }, true) }, ok).redactReaction).toBe(false);
+    const blocked = PROVENANCE_POLICY.screen(user, { permitted: false, screener: "policy list" });
+    expect(blocked.redactReaction).toBe(true);
+    expect(applySafetyDecision(user, blocked).reaction).toBeUndefined();
+    expect(PROVENANCE_POLICY.screen(base, { permitted: false, screener: "policy list" }).redactReaction).toBe(false);
+  });
+
+  it("validates reaction records from user input or imports", () => {
+    const good = validateReactionRecord({ provenance: { source: "user" }, reagents: [{ role: "solvent", name: "water" }], conditions: { time: { value: 2, unit: "h" } }, yield: { value: 55, unit: "%", type: "isolated" }, procedure: "notes" });
+    expect(good.ok).toBe(true);
+    if (good.ok) {
+      expect(good.record.reviewed).toBe(false);
+      expect(JSON.parse(JSON.stringify(good.record))).toEqual(good.record);
+    }
+    expect(validateReactionRecord({ reagents: [], procedure: "" }).ok).toBe(false);
+    expect(validateReactionRecord({ provenance: { source: "literature" }, reagents: [], procedure: "" }).ok).toBe(false);
+    expect(validateReactionRecord({ provenance: { source: "user" }, reagents: [{ role: "wizard", name: "x" }], procedure: "" }).ok).toBe(false);
+    expect(validateReactionRecord({ provenance: { source: "user" }, reagents: [], yield: { value: 150, unit: "%", type: "isolated" }, procedure: "" }).ok).toBe(false);
+    expect(validateReactionRecord({ provenance: { source: "alien" }, reagents: [], procedure: "" }).ok).toBe(false);
   });
 });

@@ -60,7 +60,7 @@ function cssVar(el: HTMLElement, name: string, fallback: string): string {
 }
 
 function createEngine(container: HTMLElement): Engine {
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance", preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.domElement.className = "viewport-canvas";

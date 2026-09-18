@@ -853,3 +853,49 @@ kbd {
 .issue.ok {
   border-left-color: var(--ok);
 }
+
+.candidate-body {
+  cursor: pointer;
+}
+.reaction-section {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.reaction {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.reagents {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 11.5px;
+}
+.reagents td {
+  padding: 2px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.procedure {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 12px;
+}
+.reaction-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.reagent-row {
+  display: flex;
+  gap: 4px;
+}
+.reagent-row .select {
+  width: auto;
+  flex: 0 0 auto;
+}
+.reagent-row .input {
+  min-width: 0;
+}

@@ -4,10 +4,11 @@ A desktop-first, cross-platform application that treats molecular structures the
 treats mechanical parts: an interactive 3D viewport, a deterministic molecular graph as the single
 source of truth, and computed properties from established cheminformatics libraries.
 
-**Status: prototype, phases 0–8 complete** (analysis, domain model, 3D viewer, editor, chemistry
-engine, import/export, UX, assistant architecture, retrosynthesis abstraction). See
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the architecture, dependency choices, risks
-and the roadmap. Remaining: integration/visual test suite and CI (phase 9), packaging (phase 10).
+**Status: prototype, all ten phases delivered** (analysis, domain model, 3D viewer, editor,
+chemistry engine, import/export, UX, assistant architecture, retrosynthesis abstraction,
+end-to-end tests + CI, packaging). See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the
+architecture, dependency choices, risks and roadmap, and [`docs/PACKAGING.md`](docs/PACKAGING.md)
+for the single-file build, the PWA and the Tauri desktop shell.
 
 The editor is open-ended: start from an empty canvas, place any of the 118 elements, grow
 structures atom by atom without limit, bond, re-order, move, delete, undo and redo. The built-in
@@ -16,7 +17,9 @@ sample molecules are optional starting points, not a catalogue.
 ## Layout
 
 ```
-apps/web                 React + Three.js client (runs in any modern browser incl. iPad Safari)
+apps/web                 React + Three.js client (runs in any modern browser incl. iPad Safari; PWA-ready)
+apps/desktop             Tauri 2 desktop shell scaffold (Windows NSIS/MSI, macOS, Linux)
+tests/e2e                Playwright end-to-end and visual smoke tests against the built page
 packages/molecule-model  TypeScript domain model: Atom, Bond, Molecule, Conformer, validation,
                          formula/weight, JSON serialization, built-in samples
 packages/chem-core       Python chemistry core: schema mirror, RDKit bridge, engine-side
@@ -34,7 +37,8 @@ pnpm install
 pnpm test          # TypeScript unit tests (domain model + viewer scene builder)
 pnpm typecheck
 pnpm dev           # web client at http://localhost:5173
-pnpm build         # apps/web/dist/ (multi-file) and apps/web/dist/molecular-cad.html (single file)
+pnpm build         # apps/web/dist/ (multi-file, PWA) and apps/web/dist/molecular-cad.html (single file)
+pnpm test:e2e      # Playwright suite against the built page (needs Chromium: pnpm exec playwright install chromium)
 
 cd packages/chem-core
 uv venv && uv pip install -e ".[dev]"
@@ -110,8 +114,13 @@ The right panel has four tabs: **Inspect**, **Chemistry**, **Assistant**, **Retr
 - **Retro.** `RetrosynthesisService` (`analyzeTarget`, `generateCandidates`, `rankCandidates`) is
   a research abstraction. The bundled mock recognises functional groups, lists acyclic bonds that
   could conceptually be disconnected (ester, amide, ether, amine, α-carbonyl, generic C–C), shows
-  the H-capped fragments with their SMILES, and ranks them with a fixed heuristic. A `SafetyPolicy`
-  screens every candidate; the data model has no reagents, conditions, yields or procedures.
+  the H-capped fragments with their SMILES, and ranks them with a fixed heuristic. Every candidate
+  can carry a `ReactionRecord` (reagents with roles and amounts, conditions, yield, procedure)
+  modelled after the Open Reaction Database, always with a provenance (user, literature, database
+  or model). The mock has no knowledge base and never fills these fields; you can add your own
+  notes per candidate and copy the whole analysis as JSON. A `SafetyPolicy` gates what is shown:
+  model-generated details stay hidden until reviewed, and a pluggable `TargetScreener` can withhold
+  operational details for a deployment's restricted targets (none is shipped).
 
 ## Principles
 

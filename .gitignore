@@ -8,3 +8,7 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 apps/web/public/rdkit/
+test-results/
+playwright-report/
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/

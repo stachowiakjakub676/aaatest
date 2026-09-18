@@ -1,6 +1,6 @@
 # Molecular CAD — architecture and phase 0 analysis
 
-_Last updated after phase 8 (assistant, retrosynthesis abstraction). Keep this file in sync with the code._
+_Last updated after phase 10 (packaging). Keep this file in sync with the code._
 
 ## 1. Repository and environment (phase 0 findings)
 
@@ -40,7 +40,7 @@ _Last updated after phase 8 (assistant, retrosynthesis abstraction). Keep this f
 | `/packages/shared-types` | folded into `molecule-model/src/types.ts`            | The types *are* the model; a separate package would be one file re-exporting another. Split later if the API contract grows (OpenAPI-generated types). |
 | `/packages/ui`        | deferred; components live in `apps/web/src/ui`          | Only one client exists. Extract when the iPad/desktop shells need the same components.               |
 | `/tests/{unit,integration,visual}` | tests colocated per package (`test/`, `tests/`) | Each package runs its own suite in its own toolchain (vitest / pytest). `/tests` is reserved for cross-package integration and visual tests (phase 9). |
-| `/apps/desktop`       | not created yet                                         | Phase 10. Plan: Tauri shell around `apps/web` for Windows/macOS, bundling a Python sidecar for chem-core. |
+| `/apps/desktop`       | Tauri 2 scaffold (config, Rust entry, capabilities)     | Hosts `apps/web/dist`; Python API optional as a sidecar. See docs/PACKAGING.md. |
 | Python domain model   | `chem-core/schema.py` mirrors the TS types              | The client needs the model without a server (iPad, offline). The TS model is canonical; Python validates the same JSON. |
 
 ### Where chemistry runs on an iPad
@@ -200,10 +200,15 @@ step) and on demand (Tidy, 800 iterations). Real optimisation remains the engine
   bonds with a retron class, splits the graph there (`splitAtBond`, H-capped fragments), asks the
   chemistry engine for fragment SMILES, and ranks by a fixed heuristic (class weight + fragment
   balance). Ring bonds are never cut.
-- Safety design: the candidate data model has no fields for reagents, conditions, quantities,
-  yields or procedures; `NO_OPERATIONAL_DETAILS_POLICY` rejects any candidate carrying such keys, so
-  a future model-backed implementation cannot leak them into the UI. The panel states this
-  explicitly and labels everything as a mock research abstraction.
+- Reaction data: `ReactionRecord { reagents[], conditions, yield?, procedure, provenance, reviewed }`
+  (ORD-inspired) is optional on every candidate. `validateReactionRecord` checks user input and
+  imports. The mock never fills it; the panel offers a notes form (provenance `user`, or
+  `literature` when a citation is given) and a JSON export of the whole analysis.
+- Safety design: `PROVENANCE_POLICY` decides per candidate whether the reaction record is shown:
+  withheld when the `TargetScreener` did not permit the target, or when provenance is `model` and
+  nobody marked it reviewed; conceptual disconnections themselves are always shown. `NO_SCREENER`
+  is the shipped default and says so in the UI; a deployment plugs its own screener in. The panel
+  labels everything as a mock research abstraction.
 
 ## 5. Dependencies
 
@@ -265,8 +270,8 @@ surface minimal.
 | 6     | UX: sketch clean-up while drawing, import/export dialog, header actions, shortcuts overlay | done (phone drawer deferred) |
 | 7     | AI layer interfaces (analysis / prediction / explanation), suggestions require confirmation | done |
 | 8     | Retrosynthesis abstraction with a non-operational mock                 | done |
-| 9     | Integration & visual tests, CI                                         | next |
-| 10    | Tauri desktop packaging (Windows installer), PWA for iPad              | |
+| 9     | Playwright end-to-end suite (editor, chemistry, import/export, assistant/retro, visual smoke) + GitHub Actions CI | done |
+| 10    | PWA (manifest, service worker, icons), Tauri 2 desktop scaffold with Windows NSIS/MSI targets, packaging guide | done (desktop build not compiled here) |
 
 ## 8. Test inventory
 
@@ -274,7 +279,8 @@ surface minimal.
 | --------------------------------------- | ----- | --------------------------------------------------------------------- |
 | `packages/molecule-model` (vitest)      | 103   | periodic table, pure edit ops, conformers, validation rules, formula/weight, implicit H, JSON round trips and malformed input, vector maths, atom placement, MOL V2000 read/write, SDF and format detection, sketch clean-up (methane, ring closure, aromatic planarity, twisted double bond, 2D lifting, fixed atoms), perception (rings, cycles, functional groups), id-collision regression |
 | `packages/chem-core` (pytest)           | 12    | schema round trip, RDKit bridge round trip, aromatic handling, engine validation, computed properties, samples validity |
-| `apps/web` (vitest)                     | 45    | scene builder ↔ graph synchronisation, picking, selection, measurements, editor commands, undo/redo history, RDKit WASM engine (real wasm in node) incl. SMILES round trip, remote engine with a fake server, analysis report + rule suggestions, suggestion validation/application (incl. injected operations), template and remote explainers, mock retrosynthesis and safety policy |
+| `apps/web` (vitest)                     | 46    | scene builder ↔ graph synchronisation, picking, selection, measurements, editor commands, undo/redo history, RDKit WASM engine (real wasm in node) incl. SMILES round trip, remote engine with a fake server, analysis report + rule suggestions, suggestion validation/application (incl. injected operations), template and remote explainers, mock retrosynthesis and safety policy |
+| `tests/e2e` (Playwright)                | 8     | built page in Chromium: open-ended building with ring closure and undo/redo, drag, RDKit properties and valence errors, SMILES/MOL/SDF/JSON import-export round trip, blocked invalid import, assistant suggestions/explanations, mock retro with reaction notes, visual smoke (pixel statistics + screenshot attachment) |
 | `services/api` (pytest)                 | 12    | health, validation errors with atom ids, computed properties, 409 on unsanitisable input, 422 on bad schema, optimisation, SMILES round trip with stereo, garbage SMILES, AI endpoint disabled by default and with a fake provider |
 
 End-to-end checks of the built page (tap to add, attach, bond, undo/redo, inspector edits, delete,

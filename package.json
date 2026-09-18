@@ -8,9 +8,11 @@
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck",
     "build": "pnpm -r --if-present build",
-    "dev": "pnpm --filter @molecular-cad/web dev"
+    "dev": "pnpm --filter @molecular-cad/web dev",
+    "test:e2e": "playwright test -c tests/e2e/playwright.config.ts"
   },
   "devDependencies": {
+    "@playwright/test": "1.56.1",
     "typescript": "^5.9.0"
   }
 }
