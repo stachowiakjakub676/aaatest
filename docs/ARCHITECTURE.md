@@ -1,6 +1,6 @@
 # Molecular CAD — architecture and phase 0 analysis
 
-_Last updated after phase 3 (editor). Keep this file in sync with the code._
+_Last updated after phase 4 (chemistry engine). Keep this file in sync with the code._
 
 ## 1. Repository and environment (phase 0 findings)
 
@@ -110,6 +110,29 @@ result is flagged `approximate` when an isotope label or a mass-number-only elem
 - Over-valent or otherwise inconsistent intermediate states are allowed and reported by the
   validator, so the user can build freely and fix afterwards.
 
+## 4c. Chemistry engine (phase 4)
+
+- **Interface** `apps/web/src/chemistry/engine.ts`: `ChemistryEngine { ready, validate, properties,
+  optimizeGeometry, capabilities }`. Results carry `kind: "computed"` and a `source` string. A
+  separate `PredictionService` interface (returning `kind: "predicted"` items with model name and
+  uncertainty) exists with a no-op implementation so the UI already distinguishes the two.
+- **WasmRdkitEngine**: official `@rdkit/rdkit` build (RDKit MinimalLib, 7.3 MB wasm). Molecules
+  are sent as MOL V2000 blocks written by `molecule-model/src/molfile.ts`; RDKit's error log is
+  captured and mapped back to atom ids for validation messages. No force fields in this build, so
+  geometry optimisation is reported as unsupported. The single-file build embeds the glue and the
+  wasm bytes (base64, instantiated through Emscripten's `instantiateWasm` hook: no fetch, works from
+  `file://` and under strict CSP). The multi-file build loads `./rdkit/*` lazily.
+- **RemoteRdkitEngine**: `services/api` (FastAPI). `POST /validate`, `/properties`, `/optimize`.
+  `chem_core.geometry.optimize_geometry` adds hydrogens temporarily, minimises with MMFF94 (UFF
+  fallback), and returns only the caller's atoms in the caller's order; `embed=true` regenerates a
+  conformer with ETKDG (seed 42) first. The server URL is a user setting.
+- **UI**: the inspector's Chemistry section shows engine choice and status, engine validation
+  issues, computed properties (canonical SMILES, InChIKey, exact mass, curated descriptors with the
+  same keys/labels on both engines) and the Predictions placeholder. Geometry optimisation is an
+  explicit button that produces one undoable history step; the engine never moves atoms on its own.
+- Descriptor definitions are aligned across engines (e.g. Lipinski N+O / NH+OH counts) so
+  switching engines does not change numbers silently.
+
 ## 5. Dependencies
 
 | Dependency                | Version    | Role                                   | Maintenance check (2026-09)                        |
@@ -121,8 +144,9 @@ result is flagged `approximate` when an isotope label or a mass-number-only elem
 | typescript                | ^5.9       | types                                  | actively maintained                                 |
 | rdkit (Python)            | ≥2024.3    | chemistry core                         | two releases/year, industry standard, BSD           |
 | pytest                    | ≥8         | Python tests                           | actively maintained                                 |
-| planned: fastapi, uvicorn | —          | API (phase 4)                          | actively maintained                                 |
-| planned: @rdkit/rdkit     | 2026.3     | RDKit WASM for offline iPad chemistry  | released by the RDKit project alongside RDKit       |
+| fastapi, uvicorn          | ≥0.115     | chemistry API                          | actively maintained                                 |
+| @rdkit/rdkit              | 2026.3.6   | RDKit WASM for offline iPad chemistry  | released by the RDKit project alongside RDKit       |
+| @types/node (dev)         | ^22        | node typings for build scripts/tests   | actively maintained                                 |
 | planned: tauri            | 2.x        | desktop shell (phase 10)               | actively maintained                                 |
 
 No UI component library, no state-management library, no CSS framework: the app is small enough that
@@ -163,8 +187,8 @@ surface minimal.
 | 1     | Domain model, validation, formula, serialization, tests (TS + Python) | done   |
 | 2     | 3D viewer: orbit/zoom/pan, picking, labels, bond orders, fit/reset    | done   |
 | 3     | Editor: add/delete atom & bond, bond order, move atom, undo/redo, H fill | done   |
-| 4     | ChemistryEngine interface, FastAPI service, RDKit WASM adapter, property panel (computed vs predicted), geometry optimisation | next |
-| 5     | SMILES / MOL / SDF import & export with validation and round-trip tests | |
+| 4     | ChemistryEngine interface, FastAPI service, RDKit WASM adapter, property panel (computed vs predicted), geometry optimisation | done |
+| 5     | SMILES / MOL / SDF import & export with validation and round-trip tests (MOL V2000 reader/writer already exists) | next |
 | 6     | UX polish: tool modes, touch drawer, keyboard map, change log          | |
 | 7     | AI layer interfaces (analysis / prediction / explanation), suggestions require confirmation | |
 | 8     | Retrosynthesis abstraction with a non-operational mock                 | |
@@ -175,9 +199,10 @@ surface minimal.
 
 | Suite                                   | Count | What it covers                                                        |
 | --------------------------------------- | ----- | --------------------------------------------------------------------- |
-| `packages/molecule-model` (vitest)      | 74    | periodic table, pure edit ops, conformers, validation rules, formula/weight, implicit H, JSON round trips and malformed input, vector maths and atom placement |
+| `packages/molecule-model` (vitest)      | 86    | periodic table, pure edit ops, conformers, validation rules, formula/weight, implicit H, JSON round trips and malformed input, vector maths, atom placement, MOL V2000 read/write |
 | `packages/chem-core` (pytest)           | 12    | schema round trip, RDKit bridge round trip, aromatic handling, engine validation, computed properties, samples validity |
-| `apps/web` (vitest)                     | 23    | scene builder ↔ graph synchronisation, picking data, selection state, bounding sphere, measurements, editor commands (open-ended building, bonds, hydrogens), undo/redo history |
+| `apps/web` (vitest)                     | 31    | scene builder ↔ graph synchronisation, picking, selection, measurements, editor commands, undo/redo history, RDKit WASM engine (real wasm in node), remote engine with a fake server |
+| `services/api` (pytest)                 | 8     | health, validation errors with atom ids, computed properties, 409 on unsanitisable input, 422 on bad schema, optimisation bends a collinear sketch, keeps atom order |
 
 End-to-end checks of the built page (tap to add, attach, bond, undo/redo, inspector edits, delete,
 drag) are run with headless Chromium during development; a committed Playwright suite is planned

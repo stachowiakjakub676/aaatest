@@ -7,3 +7,4 @@ export * from "./serialization";
 export * from "./samples";
 export * from "./vec3";
 export * from "./placement";
+export * from "./molfile";

@@ -1,10 +1,20 @@
 # services/api
 
-Planned FastAPI service (phase 4). It will be a thin HTTP layer over `packages/chem-core`:
+FastAPI service over `packages/chem-core`. No chemistry logic lives here; everything is delegated
+to `chem_core` so the same functions can be unit-tested without HTTP and reused by a desktop sidecar.
 
-- `POST /validate` — engine-side validation of an MCAD-JSON molecule
-- `POST /properties` — computed descriptors (RDKit), tagged `kind: "computed"`
-- `POST /convert` — SMILES / MOL / SDF import and export (phase 5)
+```bash
+uv venv && uv pip install -e ".[dev]"
+.venv/bin/python -m pytest
+.venv/bin/uvicorn app.main:app --reload --port 8000
+```
 
-No chemistry logic lives here; everything is delegated to `chem_core` so the same functions can be
-unit-tested without HTTP and reused by a desktop sidecar.
+| Endpoint            | Body                                   | Result                                              |
+| ------------------- | -------------------------------------- | --------------------------------------------------- |
+| `GET /health`       |                                        | engine name and RDKit version                       |
+| `POST /validate`    | `{ molecule }`                         | `{ valid, issues[] }` with the client's atom ids    |
+| `POST /properties`  | `{ molecule }`                         | computed formula, weights, SMILES, InChI, descriptors (409 if the structure does not sanitise) |
+| `POST /optimize`    | `{ molecule, max_iters?, embed? }`     | molecule with optimised coordinates, force field, energy, converged flag |
+
+`molecule` is MCAD-JSON (schemaVersion 1) as defined in `packages/molecule-model/src/types.ts`.
+CORS is wide open for development; restrict `allow_origins` per deployment.

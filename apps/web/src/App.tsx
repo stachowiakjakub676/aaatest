@@ -15,6 +15,28 @@ import { canRedo, canUndo, commit, commitFrom, createHistory, redo, redoLabel, r
 import type { History } from "./editor/history";
 import { MODES } from "./editor/modes";
 import type { EditorMode } from "./editor/modes";
+import { WasmRdkitEngine, browserRDKitLoader } from "./chemistry/wasmEngine";
+import { RemoteRdkitEngine } from "./chemistry/remoteEngine";
+import { useChemistry } from "./chemistry/useChemistry";
+import { ChemistryPanel } from "./ui/ChemistryPanel";
+import type { EngineChoice } from "./ui/ChemistryPanel";
+
+const wasmEngine = new WasmRdkitEngine(browserRDKitLoader());
+const DEFAULT_SERVER_URL = "http://localhost:8000";
+function readSetting(key: string, fallback: string): string {
+  try {
+    return window.localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+function writeSetting(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    /* private mode etc. */
+  }
+}
 
 let newCounter = 0;
 function blankMolecule(): Molecule {
@@ -35,9 +57,16 @@ export function App() {
   const viewportRef = useRef<ViewportHandle>(null);
   const dragStartRef = useRef<Molecule | null>(null);
 
+  // Chemistry engine: in-browser RDKit by default; the server engine adds geometry optimisation.
+  const [engineChoice, setEngineChoice] = useState<EngineChoice>(() => (readSetting("mcad.engine", "wasm") === "server" ? "server" : "wasm"));
+  const [serverUrl, setServerUrl] = useState(() => readSetting("mcad.serverUrl", DEFAULT_SERVER_URL));
+  const engine = useMemo(() => (engineChoice === "server" ? new RemoteRdkitEngine(serverUrl) : wasmEngine), [engineChoice, serverUrl]);
+  const [optimizing, setOptimizing] = useState(false);
+
   const molecule = history.present;
   // The graph is the source of truth: validation and derived data come from it, never from the scene.
   const validation = useMemo(() => validateMolecule(molecule), [molecule]);
+  const chemistry = useChemistry(engine, molecule);
 
   useEffect(() => {
     setSelection((sel) => pruneSelection(sel, new Set(molecule.atoms.map((a) => a.id)), new Set(molecule.bonds.map((b) => b.id))));
@@ -149,6 +178,23 @@ export function App() {
     run((m) => cmd.addHydrogens(m, target));
   }, [selection, run]);
 
+  /** Geometry optimisation is an explicit, undoable action; the engine never moves atoms on its own. */
+  const optimizeGeometry = useCallback(
+    async (opts: { embed: boolean }) => {
+      setOptimizing(true);
+      try {
+        const result = await chemistry.optimize(opts);
+        setHistory((h) => (h.present === molecule ? commit(h, result.molecule, `${opts.embed ? "Re-embed" : "Optimise"} geometry (${result.forceField})`) : h));
+        setNotice(`${result.forceField}: energy ${result.energy.toFixed(2)} ${result.energyUnit}${result.converged ? "" : " (not converged, run again)"}`);
+      } catch (e) {
+        setNotice(e instanceof Error ? e.message : String(e));
+      } finally {
+        setOptimizing(false);
+      }
+    },
+    [chemistry, molecule],
+  );
+
   // Keyboard shortcuts (desktop).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -198,7 +244,7 @@ export function App() {
         <div className="brand">
           <span className="brand-mark" aria-hidden="true" />
           <span className="brand-name">Molecular CAD</span>
-          <span className="brand-phase">prototype · phase 3 editor</span>
+          <span className="brand-phase">prototype · phase 4 chemistry</span>
         </div>
         <div className="header-molecule">
           <span className="muted">Molecule</span> <strong>{molecule.name ?? molecule.id}</strong>
@@ -272,7 +318,26 @@ export function App() {
         onAddHydrogens={(id) => run((m) => cmd.addHydrogens(m, id))}
         onSetBondOrder={(id, o) => run((m) => cmd.changeBondOrder(m, id, o))}
         onDeleteBond={(id) => run((m) => cmd.deleteBond(m, id))}
-      />
+      >
+        <ChemistryPanel
+          engine={engine}
+          state={chemistry.state}
+          choice={engineChoice}
+          onChoice={(c) => {
+            setEngineChoice(c);
+            writeSetting("mcad.engine", c);
+          }}
+          serverUrl={serverUrl}
+          onServerUrl={(url) => {
+            const next = url || DEFAULT_SERVER_URL;
+            setServerUrl(next);
+            writeSetting("mcad.serverUrl", next);
+          }}
+          onOptimize={(o) => void optimizeGeometry(o)}
+          optimizing={optimizing}
+          hasAtoms={molecule.atoms.length > 0}
+        />
+      </Inspector>
 
       <StatusBar validation={validation} selection={selection} mode={mode} element={element} pendingAtomId={pendingAtomId} lastAction={history.lastLabel} notice={notice} />
     </div>

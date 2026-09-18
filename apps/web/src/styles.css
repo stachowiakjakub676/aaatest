@@ -292,6 +292,10 @@ kbd {
   color: var(--accent);
   border-color: var(--accent);
 }
+.tag-predicted {
+  color: var(--warn);
+  border-color: var(--warn);
+}
 .status.ok {
   color: var(--ok);
 }

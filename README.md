@@ -4,9 +4,9 @@ A desktop-first, cross-platform application that treats molecular structures the
 treats mechanical parts: an interactive 3D viewport, a deterministic molecular graph as the single
 source of truth, and computed properties from established cheminformatics libraries.
 
-**Status: prototype, phases 0–3 complete** (analysis, domain model, 3D viewer, editor). See
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the architecture, dependency choices, risks and
-the roadmap. The chemistry engine/API (phase 4) and import/export (phase 5) are next.
+**Status: prototype, phases 0–4 complete** (analysis, domain model, 3D viewer, editor, chemistry
+engine). See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the architecture, dependency
+choices, risks and the roadmap. Import/export of SMILES/MOL/SDF (phase 5) is next.
 
 The editor is open-ended: start from an empty canvas, place any of the 118 elements, grow
 structures atom by atom without limit, bond, re-order, move, delete, undo and redo. The built-in
@@ -19,8 +19,8 @@ apps/web                 React + Three.js client (runs in any modern browser inc
 packages/molecule-model  TypeScript domain model: Atom, Bond, Molecule, Conformer, validation,
                          formula/weight, JSON serialization, built-in samples
 packages/chem-core       Python chemistry core: schema mirror, RDKit bridge, engine-side
-                         validation, computed properties, sample generator
-services/api             FastAPI service exposing chem-core (phase 4, not yet implemented)
+                         validation, computed properties, geometry optimisation, sample generator
+services/api             FastAPI service exposing chem-core (validate, properties, optimize)
 docs                     Architecture and decisions
 ```
 
@@ -39,7 +39,24 @@ cd packages/chem-core
 uv venv && uv pip install -e ".[dev]"
 .venv/bin/python -m pytest
 .venv/bin/python scripts/generate_samples.py   # regenerates the built-in sample molecules
+
+cd services/api
+uv venv && uv pip install -e ".[dev]"
+.venv/bin/python -m pytest
+.venv/bin/uvicorn app.main:app --port 8000     # chemistry API for the "RDKit server" engine
 ```
+
+## Chemistry engines
+
+The client talks to chemistry through one `ChemistryEngine` interface with two implementations:
+
+| Engine                          | Runs where            | Validate | Properties | Geometry optimisation |
+| ------------------------------- | --------------------- | -------- | ---------- | --------------------- |
+| RDKit in browser (WebAssembly)  | inside the page, offline (iPad OK) | yes | yes | no (no force fields in the WASM build) |
+| RDKit server (FastAPI)          | `services/api`        | yes      | yes        | MMFF94 / UFF, optional ETKDG re-embedding |
+
+Everything an engine returns is labelled **computed**. The Predictions section is a placeholder
+for phase 7 and states that no models are configured.
 
 The single-file build `apps/web/dist/molecular-cad.html` needs no server: open it in Safari on an
 iPad, in any desktop browser, or host it as a static page.

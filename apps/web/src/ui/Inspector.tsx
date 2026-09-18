@@ -30,6 +30,8 @@ export interface InspectorProps extends InspectorActions {
   molecule: Molecule;
   selection: Selection;
   validation: ValidationResult;
+  /** Extra sections (e.g. the chemistry engine panel) rendered after the selection. */
+  children?: React.ReactNode;
 }
 
 function Row({ label, value, mono = true }: { label: string; value: React.ReactNode; mono?: boolean }) {
@@ -108,6 +110,8 @@ export function Inspector(props: InspectorProps) {
           </div>
         )}
       </section>
+
+      {props.children}
 
       {validation.issues.length > 0 && (
         <section className="panel-section">
