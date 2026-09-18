@@ -1,6 +1,6 @@
 # Molecular CAD — architecture and phase 0 analysis
 
-_Last updated after phase 6 (import/export, UX). Keep this file in sync with the code._
+_Last updated after phase 8 (assistant, retrosynthesis abstraction). Keep this file in sync with the code._
 
 ## 1. Repository and environment (phase 0 findings)
 
@@ -163,6 +163,48 @@ step) and on demand (Tidy, 800 iterations). Real optimisation remains the engine
   SMILES → molecule → SMILES on the WASM engine (aspirin, benzene) and on the API (L-alanine with
   stereo).
 
+## 4f. Assistant architecture (phase 7)
+
+```
+ molecule + validation + engine results
+        │  (deterministic)
+        ▼
+ MoleculeAnalysisService.analyze()  ──►  AnalysisReport { kind: "computed", ... , suggestions: Suggestion[] }
+        │                                        │
+        │                                        ▼
+        │                              ExplanationService.explain(report)
+        │                                 ├─ TemplateExplanationService (offline, deterministic prose)
+        │                                 └─ RemoteExplanationService → POST /ai/explain → Claude (structured JSON)
+        ▼                                        │
+ Suggestion { source: "rule" | "llm", operations: EditOperation[] }  ◄──── validated (validateSuggestion)
+        │
+        ▼  user presses Apply
+ applySuggestion() → editor command → history.commit (one undo step)
+```
+
+- The model receives only the structured report and returns prose plus optional suggestions in a
+  closed operation vocabulary (`setElement`, `setCharge`, `removeAtom`, `removeBond`,
+  `setBondOrder`, `addBondedAtom`, `addHydrogens`, `tidy`). Ids must exist, elements must be known,
+  and one invalid step discards the whole suggestion; nothing is applied without confirmation.
+- Server side (`services/api/app/ai.py`): an `ExplanationProvider` protocol with an Anthropic
+  implementation (`claude-opus-5`, `messages.parse` with a Pydantic schema, refusal handled) and a
+  disabled default; the endpoint is 503 unless `MCAD_AI_PROVIDER=anthropic` is set. Tests use a fake
+  provider. The system prompt forbids invented numbers, biological claims and synthesis details.
+- `PredictionService` stays a no-op placeholder; the UI labels PREDICTED separately from COMPUTED.
+
+## 4g. Retrosynthesis abstraction (phase 8)
+
+- `RetrosynthesisService { analyzeTarget, generateCandidates, rankCandidates }` plus a
+  `SafetyPolicy` gate. `MockRetrosynthesisService` uses `molecule-model/src/perception.ts`
+  (ring count, ring-bond test, six-cycles, functional-group catalogue) to label acyclic heavy-atom
+  bonds with a retron class, splits the graph there (`splitAtBond`, H-capped fragments), asks the
+  chemistry engine for fragment SMILES, and ranks by a fixed heuristic (class weight + fragment
+  balance). Ring bonds are never cut.
+- Safety design: the candidate data model has no fields for reagents, conditions, quantities,
+  yields or procedures; `NO_OPERATIONAL_DETAILS_POLICY` rejects any candidate carrying such keys, so
+  a future model-backed implementation cannot leak them into the UI. The panel states this
+  explicitly and labels everything as a mock research abstraction.
+
 ## 5. Dependencies
 
 | Dependency                | Version    | Role                                   | Maintenance check (2026-09)                        |
@@ -177,6 +219,7 @@ step) and on demand (Tidy, 800 iterations). Real optimisation remains the engine
 | fastapi, uvicorn          | ≥0.115     | chemistry API                          | actively maintained                                 |
 | @rdkit/rdkit              | 2026.3.6   | RDKit WASM for offline iPad chemistry  | released by the RDKit project alongside RDKit       |
 | @types/node (dev)         | ^22        | node typings for build scripts/tests   | actively maintained                                 |
+| anthropic (Python, optional) | ≥0.60   | server-side explanation provider (phase 7) | actively maintained                              |
 | planned: tauri            | 2.x        | desktop shell (phase 10)               | actively maintained                                 |
 
 No UI component library, no state-management library, no CSS framework: the app is small enough that
@@ -220,19 +263,19 @@ surface minimal.
 | 4     | ChemistryEngine interface, FastAPI service, RDKit WASM adapter, property panel (computed vs predicted), geometry optimisation | done |
 | 5     | SMILES / MOL / SDF / JSON import & export with validation and round-trip tests | done |
 | 6     | UX: sketch clean-up while drawing, import/export dialog, header actions, shortcuts overlay | done (phone drawer deferred) |
-| 7     | AI layer interfaces (analysis / prediction / explanation), suggestions require confirmation | next |
-| 8     | Retrosynthesis abstraction with a non-operational mock                 | |
-| 9     | Integration & visual tests, CI                                         | |
+| 7     | AI layer interfaces (analysis / prediction / explanation), suggestions require confirmation | done |
+| 8     | Retrosynthesis abstraction with a non-operational mock                 | done |
+| 9     | Integration & visual tests, CI                                         | next |
 | 10    | Tauri desktop packaging (Windows installer), PWA for iPad              | |
 
 ## 8. Test inventory
 
 | Suite                                   | Count | What it covers                                                        |
 | --------------------------------------- | ----- | --------------------------------------------------------------------- |
-| `packages/molecule-model` (vitest)      | 97    | periodic table, pure edit ops, conformers, validation rules, formula/weight, implicit H, JSON round trips and malformed input, vector maths, atom placement, MOL V2000 read/write, SDF and format detection, sketch clean-up (methane, ring closure, aromatic planarity, twisted double bond, 2D lifting, fixed atoms) |
+| `packages/molecule-model` (vitest)      | 103   | periodic table, pure edit ops, conformers, validation rules, formula/weight, implicit H, JSON round trips and malformed input, vector maths, atom placement, MOL V2000 read/write, SDF and format detection, sketch clean-up (methane, ring closure, aromatic planarity, twisted double bond, 2D lifting, fixed atoms), perception (rings, cycles, functional groups), id-collision regression |
 | `packages/chem-core` (pytest)           | 12    | schema round trip, RDKit bridge round trip, aromatic handling, engine validation, computed properties, samples validity |
-| `apps/web` (vitest)                     | 33    | scene builder ↔ graph synchronisation, picking, selection, measurements, editor commands, undo/redo history, RDKit WASM engine (real wasm in node) incl. SMILES round trip, remote engine with a fake server |
-| `services/api` (pytest)                 | 10    | health, validation errors with atom ids, computed properties, 409 on unsanitisable input, 422 on bad schema, optimisation, SMILES round trip with stereo, garbage SMILES |
+| `apps/web` (vitest)                     | 45    | scene builder ↔ graph synchronisation, picking, selection, measurements, editor commands, undo/redo history, RDKit WASM engine (real wasm in node) incl. SMILES round trip, remote engine with a fake server, analysis report + rule suggestions, suggestion validation/application (incl. injected operations), template and remote explainers, mock retrosynthesis and safety policy |
+| `services/api` (pytest)                 | 12    | health, validation errors with atom ids, computed properties, 409 on unsanitisable input, 422 on bad schema, optimisation, SMILES round trip with stereo, garbage SMILES, AI endpoint disabled by default and with a fake provider |
 
 End-to-end checks of the built page (tap to add, attach, bond, undo/redo, inspector edits, delete,
 drag) are run with headless Chromium during development; a committed Playwright suite is planned

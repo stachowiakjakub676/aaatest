@@ -23,6 +23,24 @@ import type { EngineChoice } from "./ui/ChemistryPanel";
 import { ImportExportDialog } from "./ui/ImportExportDialog";
 import type { DialogMode } from "./ui/ImportExportDialog";
 import { ShortcutsOverlay } from "./ui/ShortcutsOverlay";
+import { AssistantPanel } from "./ui/AssistantPanel";
+import type { ExplainerChoice } from "./ui/AssistantPanel";
+import { RetroPanel } from "./ui/RetroPanel";
+import { RULE_ANALYSIS } from "./ai/analysis";
+import { applySuggestion } from "./ai/suggestions";
+import { RemoteExplanationService, TemplateExplanationService } from "./ai/explanation";
+import type { Explanation, Suggestion } from "./ai/types";
+import { MockRetrosynthesisService } from "./retro/mockRetrosynthesis";
+import type { DisconnectionCandidate, TargetAnalysis } from "./retro/types";
+
+type RightTab = "inspect" | "chemistry" | "assistant" | "retro";
+const TABS: Array<[RightTab, string]> = [
+  ["inspect", "Inspect"],
+  ["chemistry", "Chemistry"],
+  ["assistant", "Assistant"],
+  ["retro", "Retro"],
+];
+const templateExplainer = new TemplateExplanationService();
 
 /** Above this size the automatic tidy after each edit is skipped (use Tidy explicitly). */
 const AUTO_TIDY_MAX_ATOMS = 300;
@@ -64,6 +82,17 @@ export function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const [autoTidy, setAutoTidy] = useState(() => readSetting("mcad.autoTidy", "1") !== "0");
   const [dialog, setDialog] = useState<DialogMode | "help" | null>(null);
+  const [tab, setTab] = useState<RightTab>("inspect");
+  // Phase 7: assistant state. Phase 8: retrosynthesis state.
+  const [explainer, setExplainer] = useState<ExplainerChoice>("template");
+  const [explanation, setExplanation] = useState<Explanation | null>(null);
+  const [explaining, setExplaining] = useState(false);
+  const [explainError, setExplainError] = useState<string | null>(null);
+  const [retroAnalysis, setRetroAnalysis] = useState<TargetAnalysis | null>(null);
+  const [retroCandidates, setRetroCandidates] = useState<DisconnectionCandidate[]>([]);
+  const [retroWorking, setRetroWorking] = useState(false);
+  const [retroError, setRetroError] = useState<string | null>(null);
+  const [retroSelected, setRetroSelected] = useState<string | null>(null);
   const viewportRef = useRef<ViewportHandle>(null);
   const dragStartRef = useRef<Molecule | null>(null);
 
@@ -77,6 +106,49 @@ export function App() {
   // The graph is the source of truth: validation and derived data come from it, never from the scene.
   const validation = useMemo(() => validateMolecule(molecule), [molecule]);
   const chemistry = useChemistry(engine, molecule);
+  const report = useMemo(
+    () => RULE_ANALYSIS.analyze({ molecule, validation, engineValidation: chemistry.state.validation, properties: chemistry.state.properties }),
+    [molecule, validation, chemistry.state.validation, chemistry.state.properties],
+  );
+  const retroService = useMemo(() => new MockRetrosynthesisService(chemistry.state.status === "ready" ? engine : null), [engine, chemistry.state.status]);
+
+  // Explanations and retro results describe a specific molecule; drop them when it changes.
+  useEffect(() => {
+    setExplanation(null);
+    setExplainError(null);
+    setRetroAnalysis(null);
+    setRetroCandidates([]);
+    setRetroSelected(null);
+  }, [molecule]);
+
+  const explain = useCallback(async () => {
+    setExplaining(true);
+    setExplainError(null);
+    try {
+      const svc = explainer === "remote" ? new RemoteExplanationService(serverUrl, () => molecule) : templateExplainer;
+      setExplanation(await svc.explain(report));
+    } catch (e) {
+      setExplanation(null);
+      setExplainError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setExplaining(false);
+    }
+  }, [explainer, serverUrl, molecule, report]);
+
+  const runRetro = useCallback(async () => {
+    setRetroWorking(true);
+    setRetroError(null);
+    try {
+      const analysis = await retroService.analyzeTarget(molecule);
+      const candidates = await retroService.rankCandidates(await retroService.generateCandidates(molecule, analysis));
+      setRetroAnalysis(analysis);
+      setRetroCandidates(candidates);
+    } catch (e) {
+      setRetroError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRetroWorking(false);
+    }
+  }, [retroService, molecule]);
 
   useEffect(() => {
     setSelection((sel) => pruneSelection(sel, new Set(molecule.atoms.map((a) => a.id)), new Set(molecule.bonds.map((b) => b.id))));
@@ -288,7 +360,7 @@ export function App() {
         <div className="brand">
           <span className="brand-mark" aria-hidden="true" />
           <span className="brand-name">Molecular CAD</span>
-          <span className="brand-phase">prototype · phase 6</span>
+          <span className="brand-phase">prototype · phase 8</span>
         </div>
         <div className="header-actions">
           <button type="button" className="btn btn-small" onClick={() => setDialog("import")} title="Import MCAD JSON, MOL, SDF or SMILES (Ctrl+O)">
@@ -374,7 +446,16 @@ export function App() {
         </div>
       </main>
 
-      <Inspector
+      <aside className="panel inspector" aria-label="Inspector">
+        <nav className="tabs" role="tablist">
+          {TABS.map(([id, label]) => (
+            <button key={id} id={`tab-${id}`} type="button" role="tab" aria-selected={tab === id} className={`tab ${tab === id ? "active" : ""}`} onClick={() => setTab(id)}>
+              {label}
+            </button>
+          ))}
+        </nav>
+        {tab === "inspect" && (
+          <Inspector
         molecule={molecule}
         selection={selection}
         validation={validation}
@@ -384,7 +465,10 @@ export function App() {
         onAddHydrogens={(id) => run((m) => cmd.addHydrogens(m, id))}
         onSetBondOrder={(id, o) => run((m) => cmd.changeBondOrder(m, id, o))}
         onDeleteBond={(id) => run((m) => cmd.deleteBond(m, id))}
-      >
+          />
+        )}
+        {tab === "chemistry" && (
+          <div className="panel-content">
         <ChemistryPanel
           engine={engine}
           state={chemistry.state}
@@ -403,7 +487,43 @@ export function App() {
           optimizing={optimizing}
           hasAtoms={molecule.atoms.length > 0}
         />
-      </Inspector>
+          </div>
+        )}
+        {tab === "assistant" && (
+          <AssistantPanel
+            report={report}
+            explainer={explainer}
+            onExplainer={(c) => {
+              setExplainer(c);
+              setExplanation(null);
+              setExplainError(null);
+            }}
+            explanation={explanation}
+            explaining={explaining}
+            error={explainError}
+            onExplain={() => void explain()}
+            onApplySuggestion={(s: Suggestion) => run((m) => applySuggestion(m, s))}
+            serverAiEnabled={null}
+          />
+        )}
+        {tab === "retro" && (
+          <RetroPanel
+            serviceLabel={retroService.label}
+            disclaimer={retroService.disclaimer}
+            analysis={retroAnalysis}
+            candidates={retroCandidates}
+            working={retroWorking}
+            error={retroError}
+            selectedId={retroSelected}
+            hasAtoms={molecule.atoms.length > 0}
+            onAnalyze={() => void runRetro()}
+            onSelect={(c) => {
+              setRetroSelected(c?.id ?? null);
+              setSelection(c ? { atoms: [], bonds: [c.bondId] } : EMPTY_SELECTION);
+            }}
+          />
+        )}
+      </aside>
 
       <StatusBar validation={validation} selection={selection} mode={mode} element={element} pendingAtomId={pendingAtomId} lastAction={history.lastLabel} notice={notice} />
 

@@ -770,3 +770,86 @@ kbd {
     display: none;
   }
 }
+
+
+/* ---------------------------------------------------------------------------
+   Right panel tabs, assistant and retrosynthesis (phases 7/8)
+   --------------------------------------------------------------------------- */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-2);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.tab {
+  flex: 1;
+  min-height: 34px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+.panel-content {
+  display: flex;
+  flex-direction: column;
+}
+.explanation {
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--panel-2);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.explanation-text {
+  margin: 0;
+  line-height: 1.5;
+}
+.suggestion-list,
+.fragment-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.suggestion {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.suggestion-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+.candidate {
+  cursor: pointer;
+}
+.candidate.selected {
+  border-color: var(--select);
+  box-shadow: inset 0 0 0 1px var(--select);
+}
+.fragment-list {
+  gap: 2px;
+  font-size: 11.5px;
+}
+.issue.ok {
+  border-left-color: var(--ok);
+}

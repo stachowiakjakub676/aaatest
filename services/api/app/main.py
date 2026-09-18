@@ -19,7 +19,17 @@ from chem_core import basic_properties, molecule_from_dict, molecule_from_smiles
 from chem_core.geometry import optimize_geometry
 from chem_core.schema import SchemaError
 
+from .ai import DisabledProvider, ExplanationProvider, provider_from_env
+
 app = FastAPI(title="Molecular CAD chemistry API", version="0.1.0")
+_provider: ExplanationProvider | None = None
+
+
+def get_explanation_provider() -> ExplanationProvider:
+    global _provider
+    if _provider is None:
+        _provider = provider_from_env()
+    return _provider
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # development default; restrict per deployment
@@ -109,3 +119,28 @@ def to_smiles(req: MoleculeRequest) -> dict:
     if not result["valid"]:
         raise HTTPException(status_code=409, detail={"message": "Structure does not sanitise; fix validation errors first.", "validation": result})
     return {"kind": "computed", "source": "rdkit", "smiles": molecule_to_smiles(mol)}
+
+
+class ExplainRequest(BaseModel):
+    report: dict[str, Any]
+
+
+@app.get("/ai/status")
+def ai_status() -> dict:
+    p = get_explanation_provider()
+    return {"enabled": not isinstance(p, DisabledProvider), "provider": p.name}
+
+
+@app.post("/ai/explain")
+def ai_explain(req: ExplainRequest) -> dict:
+    """Explain a deterministic AnalysisReport. Suggestions are proposals the client validates."""
+    provider = get_explanation_provider()
+    if isinstance(provider, DisabledProvider):
+        raise HTTPException(status_code=503, detail="No AI provider configured on the server (set MCAD_AI_PROVIDER=anthropic).")
+    if req.report.get("kind") != "computed":
+        raise HTTPException(status_code=422, detail="report.kind must be 'computed' (only deterministic reports are explained).")
+    try:
+        out = provider.explain(req.report)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {"kind": "explanation", "model": provider.name, "text": out.text, "suggestions": [s.model_dump() for s in out.suggestions]}

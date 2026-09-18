@@ -10,3 +10,4 @@ export * from "./placement";
 export * from "./molfile";
 export * from "./cleanup";
 export * from "./formats";
+export * from "./perception";

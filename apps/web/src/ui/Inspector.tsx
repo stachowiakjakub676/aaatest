@@ -55,7 +55,7 @@ export function Inspector(props: InspectorProps) {
   const single = selection.atoms.length === 1 && selection.bonds.length === 0 ? "atom" : selection.bonds.length === 1 && selection.atoms.length === 0 ? "bond" : selection.atoms.length + selection.bonds.length === 0 ? "none" : "multi";
 
   return (
-    <aside className="panel inspector" aria-label="Inspector">
+    <div className="panel-content">
       <section className="panel-section">
         <h2 className="panel-title">
           Molecule <span className="tag tag-computed">computed</span>
@@ -126,7 +126,7 @@ export function Inspector(props: InspectorProps) {
           </ul>
         </section>
       )}
-    </aside>
+    </div>
   );
 }
 

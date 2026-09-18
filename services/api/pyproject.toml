@@ -11,6 +11,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "httpx>=0.27"]
+ai = ["anthropic>=0.60"]
 
 [tool.uv.sources]
 chem-core = { path = "../../packages/chem-core", editable = true }

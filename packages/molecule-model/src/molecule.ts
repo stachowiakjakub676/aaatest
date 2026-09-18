@@ -27,6 +27,14 @@ export function resetIdCounter(): void {
   counter = 0;
 }
 
+/** Next generated id that is not already used by an atom or bond of `mol`. */
+export function uniqueId(mol: Molecule, prefix: string): string {
+  const used = new Set<string>([...mol.atoms.map((a) => a.id), ...mol.bonds.map((b) => b.id)]);
+  let id = nextId(prefix);
+  while (used.has(id)) id = nextId(prefix);
+  return id;
+}
+
 export function createMolecule(init: Partial<Omit<Molecule, "schemaVersion">> = {}): Molecule {
   const mol: Molecule = {
     schemaVersion: 1,
@@ -91,7 +99,7 @@ export interface AtomInit {
 
 export function addAtom(mol: Molecule, init: AtomInit): { molecule: Molecule; atom: Atom } {
   const atom: Atom = {
-    id: init.id ?? nextId("a"),
+    id: init.id ?? uniqueId(mol, "a"),
     element: init.element,
     formalCharge: init.formalCharge ?? 0,
     position: { ...init.position },
@@ -141,7 +149,7 @@ export function addBond(mol: Molecule, init: BondInit): { molecule: Molecule; bo
     throw new Error(`Bond already exists between ${init.atomA} and ${init.atomB}`);
   }
   const bond: Bond = {
-    id: init.id ?? nextId("b"),
+    id: init.id ?? uniqueId(mol, "b"),
     atomA: init.atomA,
     atomB: init.atomB,
     order: init.order ?? "single",

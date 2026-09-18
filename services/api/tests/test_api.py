@@ -129,3 +129,35 @@ def test_smiles_round_trip_with_stereo():
 def test_from_smiles_rejects_garbage():
     r = client.post("/from_smiles", json={"smiles": "C(C"})
     assert r.status_code == 422
+
+
+def test_ai_endpoint_is_disabled_without_provider(monkeypatch):
+    import app.main as main
+
+    monkeypatch.setattr(main, "_provider", None)
+    monkeypatch.delenv("MCAD_AI_PROVIDER", raising=False)
+    assert client.get("/ai/status").json() == {"enabled": False, "provider": "disabled"}
+    r = client.post("/ai/explain", json={"report": {"kind": "computed"}})
+    assert r.status_code == 503
+
+
+def test_ai_endpoint_with_fake_provider(monkeypatch):
+    import app.main as main
+    from app.ai import ExplanationOut, SuggestionOut
+
+    class Fake:
+        name = "fake-model"
+
+        def explain(self, report):
+            assert report["molecule"]["name"] == "Water"
+            return ExplanationOut(text="Water is small.", suggestions=[SuggestionOut(title="Tidy", operations=[{"op": "tidy"}])])
+
+    monkeypatch.setattr(main, "_provider", Fake())
+    r = client.post("/ai/explain", json={"report": {"kind": "computed", "molecule": {"name": "Water"}}})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["model"] == "fake-model"
+    assert body["text"] == "Water is small."
+    assert body["suggestions"][0]["operations"] == [{"op": "tidy"}]
+    bad = client.post("/ai/explain", json={"report": {"kind": "predicted"}})
+    assert bad.status_code == 422

@@ -4,10 +4,10 @@ A desktop-first, cross-platform application that treats molecular structures the
 treats mechanical parts: an interactive 3D viewport, a deterministic molecular graph as the single
 source of truth, and computed properties from established cheminformatics libraries.
 
-**Status: prototype, phases 0–6 complete** (analysis, domain model, 3D viewer, editor, chemistry
-engine, import/export, UX). See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the
-architecture, dependency choices, risks and the roadmap. The AI-assistant interfaces (phase 7) and
-the retrosynthesis abstraction (phase 8) are next.
+**Status: prototype, phases 0–8 complete** (analysis, domain model, 3D viewer, editor, chemistry
+engine, import/export, UX, assistant architecture, retrosynthesis abstraction). See
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the architecture, dependency choices, risks
+and the roadmap. Remaining: integration/visual test suite and CI (phase 9), packaging (phase 10).
 
 The editor is open-ended: start from an empty canvas, place any of the 118 elements, grow
 structures atom by atom without limit, bond, re-order, move, delete, undo and redo. The built-in
@@ -92,6 +92,26 @@ the editor; imports with errors are blocked. SMILES import through the in-browse
 3D sketch (RDKit 2D layout lifted by the clean-up; stereocentres not guaranteed); through the server
 engine it yields an ETKDG conformer that honours the SMILES stereochemistry. Flat 2D MOL input is
 lifted into 3D on request.
+
+## Assistant and retrosynthesis (phases 7–8)
+
+The right panel has four tabs: **Inspect**, **Chemistry**, **Assistant**, **Retro**.
+
+- **Assistant.** A deterministic `MoleculeAnalysisService` turns the molecule, its validation and
+  the engine's descriptors into a structured `AnalysisReport` (with Lipinski rule checks, labelled
+  as rule evaluations). An `ExplanationService` turns the report into prose: the built-in template
+  explainer works offline; the server explainer calls a language model through
+  `POST /ai/explain` (Anthropic SDK, enabled with `MCAD_AI_PROVIDER=anthropic` on the API). The
+  model only ever sees the report and can only propose **suggestions** made of a closed set of
+  edit operations; the client validates each against the live molecule and applies it only when
+  you press *Apply* (one undoable step). Rule-based suggestions (add hydrogens, fix an over-valent
+  carbon, tidy) use the same path. `PredictionService` remains a placeholder: no models, no
+  predicted numbers.
+- **Retro.** `RetrosynthesisService` (`analyzeTarget`, `generateCandidates`, `rankCandidates`) is
+  a research abstraction. The bundled mock recognises functional groups, lists acyclic bonds that
+  could conceptually be disconnected (ester, amide, ether, amine, α-carbonyl, generic C–C), shows
+  the H-capped fragments with their SMILES, and ranks them with a fixed heuristic. A `SafetyPolicy`
+  screens every candidate; the data model has no reagents, conditions, yields or procedures.
 
 ## Principles
 
