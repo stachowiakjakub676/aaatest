@@ -1,6 +1,6 @@
 # Molecular CAD — architecture and phase 0 analysis
 
-_Last updated after phase 4 (chemistry engine). Keep this file in sync with the code._
+_Last updated after phase 6 (import/export, UX). Keep this file in sync with the code._
 
 ## 1. Repository and environment (phase 0 findings)
 
@@ -133,6 +133,36 @@ result is flagged `approximate` when an isotope label or a mass-number-only elem
 - Descriptor definitions are aligned across engines (e.g. Lipinski N+O / NH+OH counts) so
   switching engines does not change numbers silently.
 
+## 4d. Sketch clean-up force field (phases 5/6)
+
+`molecule-model/src/cleanup.ts` is a deliberately small force field used as a *drawing aid*:
+harmonic bonds (ideal lengths from covalent radii, shortened for multiple bonds), harmonic angles
+with the ideal from the centre's hybridisation (sp 180°, sp2 120°, sp3 109.47°, hypervalent 90°,
+metals by coordination number), an out-of-plane term for three-coordinate sp2 centres, torsions
+(2-fold planar on double bonds, weak 3-fold staggered on sp3-sp3 single bonds) and a soft quadratic
+repulsion for pairs more than two bonds apart. Minimisation is damped steepest descent with
+backtracking; analytic gradients for pair terms, central differences for the angular ones. A tiny
+deterministic jitter (0.02 Å) breaks the symmetry of planar/linear input, which otherwise sits on a
+saddle point; a larger jitter lifts 2D input into 3D. Energies are arbitrary units and are never
+shown as physical quantities. Fixed atoms are supported (drag interactions).
+
+The editor runs it automatically after bonding changes (≤ 300 atoms, 250 iterations, same undo
+step) and on demand (Tidy, 800 iterations). Real optimisation remains the engine's MMFF94/UFF.
+
+## 4e. Import / export (phase 5)
+
+- Formats: MCAD JSON (`serialization.ts`), MOL V2000 (`molfile.ts`), SDF with data items
+  (`formats.ts`), SMILES via the chemistry engine (`fromSmiles` / `toSmiles`).
+- `detectFormat` works on content only; `parseStructureText` dispatches for coordinate-carrying
+  formats. SMILES needs an engine: the WASM engine lays out in 2D and the clean-up lifts to 3D;
+  the server engine embeds with ETKDG (seed 42) and relaxes with MMFF94/UFF, honouring stereo.
+- Pipeline: parse → shape validation → structural validation (`validateMolecule`) → the dialog
+  shows every issue → import is blocked on errors, allowed with warnings. Flat 2D coordinates are
+  detected and optionally lifted.
+- Round trips are tested at every layer: JSON, MOL write→parse for all samples, SDF multi-record,
+  SMILES → molecule → SMILES on the WASM engine (aspirin, benzene) and on the API (L-alanine with
+  stereo).
+
 ## 5. Dependencies
 
 | Dependency                | Version    | Role                                   | Maintenance check (2026-09)                        |
@@ -188,9 +218,9 @@ surface minimal.
 | 2     | 3D viewer: orbit/zoom/pan, picking, labels, bond orders, fit/reset    | done   |
 | 3     | Editor: add/delete atom & bond, bond order, move atom, undo/redo, H fill | done   |
 | 4     | ChemistryEngine interface, FastAPI service, RDKit WASM adapter, property panel (computed vs predicted), geometry optimisation | done |
-| 5     | SMILES / MOL / SDF import & export with validation and round-trip tests (MOL V2000 reader/writer already exists) | next |
-| 6     | UX polish: tool modes, touch drawer, keyboard map, change log          | |
-| 7     | AI layer interfaces (analysis / prediction / explanation), suggestions require confirmation | |
+| 5     | SMILES / MOL / SDF / JSON import & export with validation and round-trip tests | done |
+| 6     | UX: sketch clean-up while drawing, import/export dialog, header actions, shortcuts overlay | done (phone drawer deferred) |
+| 7     | AI layer interfaces (analysis / prediction / explanation), suggestions require confirmation | next |
 | 8     | Retrosynthesis abstraction with a non-operational mock                 | |
 | 9     | Integration & visual tests, CI                                         | |
 | 10    | Tauri desktop packaging (Windows installer), PWA for iPad              | |
@@ -199,10 +229,10 @@ surface minimal.
 
 | Suite                                   | Count | What it covers                                                        |
 | --------------------------------------- | ----- | --------------------------------------------------------------------- |
-| `packages/molecule-model` (vitest)      | 86    | periodic table, pure edit ops, conformers, validation rules, formula/weight, implicit H, JSON round trips and malformed input, vector maths, atom placement, MOL V2000 read/write |
+| `packages/molecule-model` (vitest)      | 97    | periodic table, pure edit ops, conformers, validation rules, formula/weight, implicit H, JSON round trips and malformed input, vector maths, atom placement, MOL V2000 read/write, SDF and format detection, sketch clean-up (methane, ring closure, aromatic planarity, twisted double bond, 2D lifting, fixed atoms) |
 | `packages/chem-core` (pytest)           | 12    | schema round trip, RDKit bridge round trip, aromatic handling, engine validation, computed properties, samples validity |
-| `apps/web` (vitest)                     | 31    | scene builder ↔ graph synchronisation, picking, selection, measurements, editor commands, undo/redo history, RDKit WASM engine (real wasm in node), remote engine with a fake server |
-| `services/api` (pytest)                 | 8     | health, validation errors with atom ids, computed properties, 409 on unsanitisable input, 422 on bad schema, optimisation bends a collinear sketch, keeps atom order |
+| `apps/web` (vitest)                     | 33    | scene builder ↔ graph synchronisation, picking, selection, measurements, editor commands, undo/redo history, RDKit WASM engine (real wasm in node) incl. SMILES round trip, remote engine with a fake server |
+| `services/api` (pytest)                 | 10    | health, validation errors with atom ids, computed properties, 409 on unsanitisable input, 422 on bad schema, optimisation, SMILES round trip with stereo, garbage SMILES |
 
 End-to-end checks of the built page (tap to add, attach, bond, undo/redo, inspector edits, delete,
 drag) are run with headless Chromium during development; a committed Playwright suite is planned

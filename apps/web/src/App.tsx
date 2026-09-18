@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { SAMPLE_MOLECULES, createMolecule, validateMolecule } from "@molecular-cad/molecule-model";
+import { SAMPLE_MOLECULES, cleanupGeometry, createMolecule, validateMolecule } from "@molecular-cad/molecule-model";
 import type { BondOrder, Molecule, Vec3 } from "@molecular-cad/molecule-model";
 import { Viewport } from "./viewer/Viewport";
 import type { ViewportHandle } from "./viewer/Viewport";
@@ -20,6 +20,14 @@ import { RemoteRdkitEngine } from "./chemistry/remoteEngine";
 import { useChemistry } from "./chemistry/useChemistry";
 import { ChemistryPanel } from "./ui/ChemistryPanel";
 import type { EngineChoice } from "./ui/ChemistryPanel";
+import { ImportExportDialog } from "./ui/ImportExportDialog";
+import type { DialogMode } from "./ui/ImportExportDialog";
+import { ShortcutsOverlay } from "./ui/ShortcutsOverlay";
+
+/** Above this size the automatic tidy after each edit is skipped (use Tidy explicitly). */
+const AUTO_TIDY_MAX_ATOMS = 300;
+const AUTO_TIDY_ITERATIONS = 250;
+const TIDY_ITERATIONS = 800;
 
 const wasmEngine = new WasmRdkitEngine(browserRDKitLoader());
 const DEFAULT_SERVER_URL = "http://localhost:8000";
@@ -54,6 +62,8 @@ export function App() {
   const [showLabels, setShowLabels] = useState(true);
   const [additiveMode, setAdditiveMode] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [autoTidy, setAutoTidy] = useState(() => readSetting("mcad.autoTidy", "1") !== "0");
+  const [dialog, setDialog] = useState<DialogMode | "help" | null>(null);
   const viewportRef = useRef<ViewportHandle>(null);
   const dragStartRef = useRef<Molecule | null>(null);
 
@@ -79,17 +89,38 @@ export function App() {
     return () => window.clearTimeout(t);
   }, [notice]);
 
-  /** Run an editor command against the current graph and record it in history. */
-  const run = useCallback((fn: (mol: Molecule) => CommandResult) => {
+  /**
+   * Run an editor command against the current graph and record it in history. Commands that
+   * change bonding are followed by the sketch clean-up (same undo step) when auto-tidy is on,
+   * so the structure settles into a sensible shape as it is built.
+   */
+  const run = useCallback(
+    (fn: (mol: Molecule) => CommandResult) => {
+      setHistory((h) => {
+        try {
+          const r = fn(h.present);
+          if (r.selection) setSelection(r.selection);
+          let next = r.molecule;
+          if (r.tidy && autoTidy && next !== h.present && next.atoms.length <= AUTO_TIDY_MAX_ATOMS) {
+            next = cleanupGeometry(next, { maxIterations: AUTO_TIDY_ITERATIONS }).molecule;
+          }
+          return commit(h, next, r.label);
+        } catch (e) {
+          setNotice(e instanceof Error ? e.message : String(e));
+          return h;
+        }
+      });
+    },
+    [autoTidy],
+  );
+
+  /** Explicit clean-up of the whole sketch (drawing aid, not a physical force field). */
+  const tidyNow = useCallback(() => {
     setHistory((h) => {
-      try {
-        const r = fn(h.present);
-        if (r.selection) setSelection(r.selection);
-        return commit(h, r.molecule, r.label);
-      } catch (e) {
-        setNotice(e instanceof Error ? e.message : String(e));
-        return h;
-      }
+      if (h.present.atoms.length < 2) return h;
+      const r = cleanupGeometry(h.present, { maxIterations: TIDY_ITERATIONS });
+      setNotice(r.converged ? "Tidy: geometry relaxed" : "Tidy: stopped before convergence, run again for more");
+      return commit(h, r.molecule, "Tidy geometry");
     });
   }, []);
 
@@ -201,6 +232,17 @@ export function App() {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return;
       const meta = e.ctrlKey || e.metaKey;
+      if (meta && e.key.toLowerCase() === "o") {
+        e.preventDefault();
+        setDialog("import");
+        return;
+      }
+      if (meta && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        setDialog("export");
+        return;
+      }
+      if (dialog) return; // dialogs handle their own keys
       if (meta && e.key.toLowerCase() === "z") {
         e.preventDefault();
         if (e.shiftKey) doRedo();
@@ -233,10 +275,12 @@ export function App() {
       if (k === "F") viewportRef.current?.fitToView();
       else if (k === "R") viewportRef.current?.resetCamera();
       else if (k === "L") setShowLabels((v) => !v);
+      else if (k === "T") tidyNow();
+      else if (e.key === "?") setDialog("help");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [doUndo, doRedo, deleteSelected, changeMode]);
+  }, [doUndo, doRedo, deleteSelected, changeMode, tidyNow, dialog]);
 
   return (
     <div className="app">
@@ -244,7 +288,21 @@ export function App() {
         <div className="brand">
           <span className="brand-mark" aria-hidden="true" />
           <span className="brand-name">Molecular CAD</span>
-          <span className="brand-phase">prototype · phase 4 chemistry</span>
+          <span className="brand-phase">prototype · phase 6</span>
+        </div>
+        <div className="header-actions">
+          <button type="button" className="btn btn-small" onClick={() => setDialog("import")} title="Import MCAD JSON, MOL, SDF or SMILES (Ctrl+O)">
+            Import
+          </button>
+          <button type="button" className="btn btn-small" onClick={() => setDialog("export")} title="Export as MOL, SDF, JSON or SMILES (Ctrl+S)" disabled={molecule.atoms.length === 0}>
+            Export
+          </button>
+          <button type="button" className="btn btn-small" onClick={tidyNow} title="Relax the sketch geometry (T)" disabled={molecule.atoms.length < 2}>
+            Tidy
+          </button>
+          <button type="button" className="btn btn-small" onClick={() => setDialog("help")} title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">
+            ?
+          </button>
         </div>
         <div className="header-molecule">
           <span className="muted">Molecule</span> <strong>{molecule.name ?? molecule.id}</strong>
@@ -281,6 +339,14 @@ export function App() {
         onToggleAdditive={() => setAdditiveMode((v) => !v)}
         onFit={() => viewportRef.current?.fitToView()}
         onReset={() => viewportRef.current?.resetCamera()}
+        autoTidy={autoTidy}
+        onToggleAutoTidy={() => {
+          setAutoTidy((v) => {
+            writeSetting("mcad.autoTidy", v ? "0" : "1");
+            return !v;
+          });
+        }}
+        onTidy={tidyNow}
       />
 
       <main className="viewport-area">
@@ -340,6 +406,21 @@ export function App() {
       </Inspector>
 
       <StatusBar validation={validation} selection={selection} mode={mode} element={element} pendingAtomId={pendingAtomId} lastAction={history.lastLabel} notice={notice} />
+
+      {(dialog === "import" || dialog === "export") && (
+        <ImportExportDialog
+          mode={dialog}
+          molecule={molecule}
+          engine={engine}
+          engineReady={chemistry.state.status === "ready"}
+          onImport={(mol, label) => {
+            loadMolecule(mol, label);
+            setMode("select");
+          }}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog === "help" && <ShortcutsOverlay onClose={() => setDialog(null)} />}
     </div>
   );
 }

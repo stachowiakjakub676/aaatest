@@ -107,3 +107,25 @@ def test_optimize_keeps_atom_order_and_bonds_for_samples():
 def test_optimize_empty_is_422():
     r = client.post("/optimize", json={"molecule": {"schemaVersion": 1, "id": "e", "atoms": [], "bonds": []}})
     assert r.status_code == 422
+
+
+def test_smiles_round_trip_with_stereo():
+    smiles = "C[C@H](N)C(=O)O"  # L-alanine
+    r = client.post("/from_smiles", json={"smiles": smiles})
+    assert r.status_code == 200
+    mol = r.json()["molecule"]
+    assert len(mol["atoms"]) == 13  # with explicit hydrogens
+    assert all(abs(a["position"]["z"]) < 10 for a in mol["atoms"])
+    zs = [a["position"]["z"] for a in mol["atoms"]]
+    assert max(zs) - min(zs) > 0.5  # genuinely 3D
+    back = client.post("/to_smiles", json={"molecule": mol})
+    assert back.status_code == 200
+    assert back.json()["smiles"] == "C[C@H](N)C(=O)O"
+    heavy = client.post("/from_smiles", json={"smiles": "c1ccccc1", "add_hydrogens": False}).json()["molecule"]
+    assert len(heavy["atoms"]) == 6
+    assert all(b["order"] in ("single", "double") for b in heavy["bonds"])  # kekulised
+
+
+def test_from_smiles_rejects_garbage():
+    r = client.post("/from_smiles", json={"smiles": "C(C"})
+    assert r.status_code == 422

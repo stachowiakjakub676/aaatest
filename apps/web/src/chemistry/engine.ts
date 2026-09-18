@@ -55,6 +55,21 @@ export interface EngineCapabilities {
   validate: boolean;
   properties: boolean;
   optimizeGeometry: boolean;
+  /** SMILES import produces stereo-correct 3D (server) or a 3D sketch (WASM). */
+  smiles: boolean;
+}
+
+export interface FromSmilesOptions {
+  addHydrogens?: boolean;
+  name?: string;
+}
+
+export interface FromSmilesResult {
+  kind: "computed";
+  source: string;
+  molecule: Molecule;
+  /** Honest statement of what the coordinates are (e.g. "ETKDG 3D" vs "2D layout + sketch clean-up"). */
+  coordinateNote: string;
 }
 
 export interface ChemistryEngine {
@@ -66,6 +81,8 @@ export interface ChemistryEngine {
   validate(mol: Molecule): Promise<EngineValidation>;
   properties(mol: Molecule): Promise<ComputedProperties>;
   optimizeGeometry(mol: Molecule, opts?: { embed?: boolean }): Promise<OptimizedGeometry>;
+  fromSmiles(smiles: string, opts?: FromSmilesOptions): Promise<FromSmilesResult>;
+  toSmiles(mol: Molecule): Promise<string>;
 }
 
 export class EngineError extends Error {

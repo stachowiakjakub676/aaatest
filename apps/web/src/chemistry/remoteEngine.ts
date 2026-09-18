@@ -3,13 +3,13 @@
  */
 import { moleculeFromObject } from "@molecular-cad/molecule-model";
 import type { Molecule } from "@molecular-cad/molecule-model";
-import type { ChemistryEngine, ComputedProperties, Descriptor, EngineValidation, OptimizedGeometry } from "./engine";
+import type { ChemistryEngine, ComputedProperties, Descriptor, EngineValidation, FromSmilesOptions, FromSmilesResult, OptimizedGeometry } from "./engine";
 import { EngineError } from "./engine";
 
 export class RemoteRdkitEngine implements ChemistryEngine {
   readonly id = "rdkit-server";
   readonly label = "RDKit server (FastAPI)";
-  readonly capabilities = { validate: true, properties: true, optimizeGeometry: true };
+  readonly capabilities = { validate: true, properties: true, optimizeGeometry: true, smiles: true };
 
   constructor(
     public readonly baseUrl: string,
@@ -90,5 +90,17 @@ export class RemoteRdkitEngine implements ChemistryEngine {
     const positions = new Map(optimized.atoms.map((a) => [a.id, a.position]));
     const molecule: Molecule = { ...mol, atoms: mol.atoms.map((a) => ({ ...a, position: positions.get(a.id) ?? a.position })) };
     return { kind: "computed", source: `${r.source} (server)`, molecule, forceField: r.forceField, converged: r.converged, energy: r.energy, energyUnit: r.energyUnit };
+  }
+
+  async fromSmiles(smiles: string, opts: FromSmilesOptions = {}): Promise<FromSmilesResult> {
+    const r = await this.post<{ source: string; molecule: unknown }>("/from_smiles", { smiles: smiles.trim(), add_hydrogens: opts.addHydrogens ?? true, name: opts.name ?? null });
+    const molecule = moleculeFromObject(r.molecule);
+    return { kind: "computed", source: `${r.source} (server)`, molecule, coordinateNote: "3D conformer from ETKDG + force-field relaxation; stereochemistry in the SMILES is honoured." };
+  }
+
+  async toSmiles(mol: Molecule): Promise<string> {
+    if (mol.atoms.length === 0) throw new EngineError("Empty molecule.");
+    const r = await this.post<{ smiles: string }>("/to_smiles", { molecule: mol });
+    return r.smiles;
   }
 }

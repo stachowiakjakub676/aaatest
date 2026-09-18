@@ -3,9 +3,9 @@
  * Molecules travel as MOL V2000 blocks written by molecule-model. The MinimalLib has no force
  * fields or 3D embedding, so optimizeGeometry is reported as unsupported.
  */
-import { molecularWeight, writeMolfile } from "@molecular-cad/molecule-model";
+import { cleanupGeometry, molecularWeight, parseMolfile, writeMolfile } from "@molecular-cad/molecule-model";
 import type { Molecule } from "@molecular-cad/molecule-model";
-import type { ChemistryEngine, ComputedProperties, Descriptor, EngineIssue, EngineValidation, OptimizedGeometry } from "./engine";
+import type { ChemistryEngine, ComputedProperties, Descriptor, EngineIssue, EngineValidation, FromSmilesOptions, FromSmilesResult, OptimizedGeometry } from "./engine";
 import { EngineError } from "./engine";
 
 // Minimal structural typing of the parts of the RDKit JS API we use.
@@ -14,7 +14,11 @@ export interface RDKitMol {
   get_smiles(): string;
   get_inchi(): string;
   get_descriptors(): string;
+  get_molblock(details?: string): string;
   get_num_atoms(): number;
+  add_hs_in_place(): boolean;
+  remove_hs_in_place(): boolean;
+  set_new_coords(): boolean;
   delete(): void;
 }
 export interface RDKitLog {
@@ -90,7 +94,7 @@ export function browserRDKitLoader(baseUrl = "./rdkit/"): RDKitLoader {
 export class WasmRdkitEngine implements ChemistryEngine {
   readonly id = "rdkit-wasm";
   readonly label = "RDKit in browser (WebAssembly)";
-  readonly capabilities = { validate: true, properties: true, optimizeGeometry: false };
+  readonly capabilities = { validate: true, properties: true, optimizeGeometry: false, smiles: true };
   private modulePromise: Promise<RDKitModule> | null = null;
   private version = "";
   private log: RDKitLog | null = null;
@@ -164,6 +168,9 @@ export class WasmRdkitEngine implements ChemistryEngine {
         /* InChI is optional */
       }
       const mw = molecularWeight(mol, { includeImplicitHydrogens: true });
+      // Descriptors and InChI were computed with explicit hydrogens; the SMILES is reported
+      // heavy-atom only, matching the server engine and common practice.
+      rd.remove_hs_in_place();
       const out: ComputedProperties = {
         kind: "computed",
         source: `rdkit-wasm ${this.version}`,
@@ -182,6 +189,49 @@ export class WasmRdkitEngine implements ChemistryEngine {
 
   async optimizeGeometry(): Promise<OptimizedGeometry> {
     throw new EngineError("Geometry optimisation needs the server engine (RDKit force fields are not part of the WebAssembly build).");
+  }
+
+  /**
+   * SMILES -> molecule. The WASM build has no 3D embedding, so RDKit lays the structure out in
+   * 2D and the sketch clean-up lifts it into 3D. Stereocentres are therefore not guaranteed.
+   */
+  async fromSmiles(smiles: string, opts: FromSmilesOptions = {}): Promise<FromSmilesResult> {
+    const RDKit = await this.module();
+    this.takeLog();
+    const rd = RDKit.get_mol(smiles.trim());
+    const error = this.takeLog().trim();
+    if (!rd || !rd.is_valid()) {
+      rd?.delete();
+      throw new EngineError(`RDKit could not parse this SMILES${error ? `: ${error.replace(/^\[[^\]]*\]\s*/gm, "")}` : "."}`);
+    }
+    try {
+      if (opts.addHydrogens ?? true) rd.add_hs_in_place();
+      rd.set_new_coords();
+      const molblock = rd.get_molblock();
+      const parsed = parseMolfile(molblock, { id: "imported" });
+      const cleaned = cleanupGeometry(parsed, { jitter: 0.6, maxIterations: 600 });
+      const molecule: Molecule = {
+        ...cleaned.molecule,
+        metadata: { source: "smiles", smiles: smiles.trim(), coordinates: "rdkit-wasm 2D layout + sketch clean-up" },
+      };
+      if (opts.name) molecule.name = opts.name;
+      else delete molecule.name;
+      return { kind: "computed", source: `rdkit-wasm ${this.version}`, molecule, coordinateNote: "2D layout lifted into 3D by the sketch clean-up; stereocentres are not guaranteed. Use the server engine for ETKDG 3D." };
+    } finally {
+      rd.delete();
+    }
+  }
+
+  async toSmiles(mol: Molecule): Promise<string> {
+    if (mol.atoms.length === 0) throw new EngineError("Empty molecule.");
+    const { rd, error } = await this.parse(mol);
+    if (!rd) throw new EngineError("Structure does not sanitise; fix validation errors first.", { valid: false, issues: issuesFromLog(error, mol) });
+    try {
+      rd.remove_hs_in_place();
+      return rd.get_smiles();
+    } finally {
+      rd.delete();
+    }
   }
 }
 

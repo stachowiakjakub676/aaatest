@@ -10,6 +10,8 @@ from .schema import Atom, Bond, Molecule, molecule_from_dict, molecule_to_dict
 from .rdkit_bridge import from_rdkit, to_rdkit
 from .validation import ValidationIssue, validate_molecule
 from .properties import basic_properties
+from .conversion import molecule_from_smiles, molecule_to_smiles
+from .geometry import optimize_geometry
 
 __all__ = [
     "Atom",
@@ -22,4 +24,7 @@ __all__ = [
     "ValidationIssue",
     "validate_molecule",
     "basic_properties",
+    "molecule_from_smiles",
+    "molecule_to_smiles",
+    "optimize_geometry",
 ]

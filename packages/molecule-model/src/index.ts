@@ -8,3 +8,5 @@ export * from "./samples";
 export * from "./vec3";
 export * from "./placement";
 export * from "./molfile";
+export * from "./cleanup";
+export * from "./formats";

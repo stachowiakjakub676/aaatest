@@ -25,6 +25,8 @@ export interface CommandResult {
   label: string;
   /** Selection after the command (undefined = keep the current one). */
   selection?: Selection;
+  /** True when the change affects bonding/valence so an automatic geometry tidy makes sense. */
+  tidy?: boolean;
 }
 
 export class CommandError extends Error {}
@@ -51,6 +53,7 @@ export function addBondedAtom(mol: Molecule, anchorId: AtomId, element: string, 
     molecule: bonded.molecule,
     label: `Add ${element} to ${getAtom(mol, anchorId)!.element}${anchorId}`,
     selection: { atoms: [added.atom.id], bonds: [] },
+    tidy: true,
   };
 }
 
@@ -60,10 +63,10 @@ export function bondAtoms(mol: Molecule, a: AtomId, b: AtomId, order: BondOrder)
   const existing = bondBetween(mol, a, b);
   if (existing) {
     if (existing.order === order) return { molecule: mol, label: "No change" };
-    return { molecule: setBondOrder(mol, existing.id, order), label: `Bond ${existing.id}: ${order}`, selection: { atoms: [], bonds: [existing.id] } };
+    return { molecule: setBondOrder(mol, existing.id, order), label: `Bond ${existing.id}: ${order}`, selection: { atoms: [], bonds: [existing.id] }, tidy: true };
   }
   const { molecule, bond } = addBond(mol, { atomA: a, atomB: b, order });
-  return { molecule, label: `Bond ${a}-${b} (${order})`, selection: { atoms: [], bonds: [bond.id] } };
+  return { molecule, label: `Bond ${a}-${b} (${order})`, selection: { atoms: [], bonds: [bond.id] }, tidy: true };
 }
 
 const ORDER_CYCLE: BondOrder[] = ["single", "double", "triple"];
@@ -72,7 +75,7 @@ export function changeBondOrder(mol: Molecule, bondId: BondId, order: BondOrder)
   const bond = getBond(mol, bondId);
   if (!bond) throw new CommandError("Bond no longer exists.");
   if (bond.order === order) return { molecule: mol, label: "No change" };
-  return { molecule: setBondOrder(mol, bondId, order), label: `Bond ${bondId}: ${order}` };
+  return { molecule: setBondOrder(mol, bondId, order), label: `Bond ${bondId}: ${order}`, tidy: true };
 }
 
 /** single -> double -> triple -> single (aromatic goes to single). */
@@ -110,7 +113,7 @@ export function setElement(mol: Molecule, atomId: AtomId, element: string): Comm
   const atom = getAtom(mol, atomId);
   if (!atom) throw new CommandError("Atom no longer exists.");
   if (atom.element === element) return { molecule: mol, label: "No change" };
-  return { molecule: updateAtom(mol, atomId, { element }), label: `${atom.element}${atomId} -> ${element}` };
+  return { molecule: updateAtom(mol, atomId, { element }), label: `${atom.element}${atomId} -> ${element}`, tidy: true };
 }
 
 export function setFormalCharge(mol: Molecule, atomId: AtomId, formalCharge: number): CommandResult {
@@ -146,7 +149,7 @@ export function addHydrogens(mol: Molecule, atomId?: AtomId): CommandResult {
     }
   }
   if (added === 0) return { molecule: mol, label: "No hydrogens to add" };
-  return { molecule: m, label: `Add ${added} H` };
+  return { molecule: m, label: `Add ${added} H`, tidy: true };
 }
 
 /** Remove every hydrogen atom (keeps the heavy-atom skeleton). */

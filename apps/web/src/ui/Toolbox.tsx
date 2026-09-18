@@ -33,6 +33,9 @@ export interface ToolboxProps {
   onToggleAdditive(): void;
   onFit(): void;
   onReset(): void;
+  autoTidy: boolean;
+  onToggleAutoTidy(): void;
+  onTidy(): void;
 }
 
 const ORDERS: Array<{ id: BondOrder; label: string }> = [
@@ -174,6 +177,18 @@ export function Toolbox(props: ToolboxProps) {
             Remove H
           </button>
         </div>
+      </section>
+
+      <section className="panel-section">
+        <h2 className="panel-title">Geometry</h2>
+        <label className="toggle">
+          <input id="toggle-auto-tidy" type="checkbox" checked={props.autoTidy} onChange={props.onToggleAutoTidy} />
+          <span>Auto-tidy after edits</span>
+        </label>
+        <button id="btn-tidy" type="button" className="btn btn-block" onClick={props.onTidy} title="Relax bond lengths, angles and planarity (T)">
+          Tidy now
+        </button>
+        <p className="hint">Sketch clean-up: ideal bond lengths, VSEPR angles, planar sp2, staggered torsions. A drawing aid, not a physical force field; use the server engine for MMFF94.</p>
       </section>
 
       <section className="panel-section">

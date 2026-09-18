@@ -15,7 +15,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from chem_core import basic_properties, molecule_from_dict, molecule_to_dict, validate_molecule
+from chem_core import basic_properties, molecule_from_dict, molecule_from_smiles, molecule_to_dict, molecule_to_smiles, validate_molecule
 from chem_core.geometry import optimize_geometry
 from chem_core.schema import SchemaError
 
@@ -35,6 +35,12 @@ class MoleculeRequest(BaseModel):
 class OptimizeRequest(MoleculeRequest):
     max_iters: int = Field(default=2000, ge=1, le=100000)
     embed: bool = False
+
+
+class SmilesRequest(BaseModel):
+    smiles: str = Field(min_length=1, max_length=10000)
+    name: str | None = None
+    add_hydrogens: bool = True
 
 
 def _parse(raw: dict[str, Any]):
@@ -84,3 +90,22 @@ def optimize(req: OptimizeRequest) -> dict:
         "energy": out["energy"],
         "energyUnit": out["energyUnit"],
     }
+
+
+@app.post("/from_smiles")
+def from_smiles(req: SmilesRequest) -> dict:
+    """SMILES -> molecule with a deterministic 3D conformer (ETKDG + MMFF94/UFF)."""
+    try:
+        mol = molecule_from_smiles(req.smiles, mol_id="imported", name=req.name, add_hydrogens=req.add_hydrogens)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"kind": "computed", "source": "rdkit ETKDGv3", "molecule": molecule_to_dict(mol)}
+
+
+@app.post("/to_smiles")
+def to_smiles(req: MoleculeRequest) -> dict:
+    mol = _parse(req.molecule)
+    result = validate_molecule(mol)
+    if not result["valid"]:
+        raise HTTPException(status_code=409, detail={"message": "Structure does not sanitise; fix validation errors first.", "validation": result})
+    return {"kind": "computed", "source": "rdkit", "smiles": molecule_to_smiles(mol)}

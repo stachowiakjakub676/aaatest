@@ -46,7 +46,7 @@ describe("WasmRdkitEngine (RDKit WebAssembly in node)", () => {
     const p = await engine.properties(sample("caffeine"));
     expect(p.kind).toBe("computed");
     expect(p.source).toMatch(/^rdkit-wasm/);
-    expect(p.canonicalSmiles.replace(/\[H\]/g, "")).toContain("n");
+    expect(p.canonicalSmiles).toBe("Cn1c(=O)c2c(ncn2C)n(C)c1=O");
     expect(p.descriptors.aromaticRingCount?.value).toBe(2);
     expect(p.descriptors.hBondAcceptors?.value).toBe(6);
     expect(p.descriptors.tpsa?.value).toBeCloseTo(61.82, 1);
@@ -85,6 +85,26 @@ describe("WasmRdkitEngine (RDKit WebAssembly in node)", () => {
   }, 30000);
 });
 
+describe("WasmRdkitEngine SMILES round trip", () => {
+  it("imports SMILES as a 3D sketch and exports canonical SMILES back", async () => {
+    const r = await engine.fromSmiles("CC(=O)Oc1ccccc1C(=O)O", { name: "Aspirin" });
+    expect(r.molecule.atoms).toHaveLength(21); // with explicit hydrogens
+    expect(r.molecule.name).toBe("Aspirin");
+    expect(r.coordinateNote).toMatch(/stereocentres/);
+    const zs = r.molecule.atoms.map((a) => a.position.z);
+    expect(Math.max(...zs) - Math.min(...zs)).toBeGreaterThan(0.3); // lifted out of the plane
+    expect(molecularFormula(r.molecule)).toBe("C9H8O4");
+    expect(await engine.toSmiles(r.molecule)).toBe("CC(=O)Oc1ccccc1C(=O)O");
+    const heavy = await engine.fromSmiles("c1ccccc1", { addHydrogens: false });
+    expect(heavy.molecule.atoms).toHaveLength(6);
+    expect(await engine.toSmiles(heavy.molecule)).toBe("c1ccccc1");
+  }, 30000);
+
+  it("rejects unparsable SMILES with RDKit's reason", async () => {
+    await expect(engine.fromSmiles("C(C")).rejects.toThrow(/could not parse/);
+  }, 30000);
+});
+
 describe("issuesFromLog", () => {
   it("maps RDKit atom indices to atom ids and classifies messages", () => {
     const mol = pentavalentCarbon();
@@ -119,8 +139,12 @@ describe("RemoteRdkitEngine", () => {
         "/validate": { status: 200, body: { valid: true, issues: [] } },
         "/properties": { status: 200, body: { source: "rdkit 2026.03.6", canonicalSmiles: "O", molecularWeight: 18.015, exactMass: 18.0106, descriptors: { tpsa: { label: "TPSA", unit: "Å²", value: 20.23 } }, inchi: "InChI=1S/H2O/h1H2", inchiKey: "XLYOFNOQVPJJNP-UHFFFAOYSA-N" } },
         "/optimize": { status: 200, body: { source: "rdkit MMFF94", molecule: moved, forceField: "MMFF94", converged: true, energy: -1.2, energyUnit: "kcal/mol" } },
+        "/from_smiles": { status: 200, body: { source: "rdkit ETKDGv3", molecule: water } },
+        "/to_smiles": { status: 200, body: { smiles: "O" } },
       }),
     );
+    expect((await eng.fromSmiles("O")).molecule).toEqual(water);
+    expect(await eng.toSmiles(water)).toBe("O");
     expect((await eng.ready()).version).toBe("2026.03.6");
     expect((await eng.validate(water)).valid).toBe(true);
     const p = await eng.properties(water);

@@ -4,9 +4,10 @@ A desktop-first, cross-platform application that treats molecular structures the
 treats mechanical parts: an interactive 3D viewport, a deterministic molecular graph as the single
 source of truth, and computed properties from established cheminformatics libraries.
 
-**Status: prototype, phases 0–4 complete** (analysis, domain model, 3D viewer, editor, chemistry
-engine). See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the architecture, dependency
-choices, risks and the roadmap. Import/export of SMILES/MOL/SDF (phase 5) is next.
+**Status: prototype, phases 0–6 complete** (analysis, domain model, 3D viewer, editor, chemistry
+engine, import/export, UX). See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the
+architecture, dependency choices, risks and the roadmap. The AI-assistant interfaces (phase 7) and
+the retrosynthesis abstraction (phase 8) are next.
 
 The editor is open-ended: start from an empty canvas, place any of the 118 elements, grow
 structures atom by atom without limit, bond, re-order, move, delete, undo and redo. The built-in
@@ -77,6 +78,20 @@ iPad, in any desktop browser, or host it as a static page.
 
 Selecting two atoms shows their distance, three atoms the angle at the middle one. The inspector
 edits the selected atom's element and formal charge and the selected bond's order.
+
+**Geometry while drawing.** After every bonding change the sketch clean-up (a small deterministic
+force field: ideal bond lengths, VSEPR angles, planar sp2 centres, staggered/planar torsions, soft
+repulsion) relaxes the structure inside the same undo step, so chains zig-zag, rings close cleanly
+and aromatic rings go flat as you build. It is a drawing aid with arbitrary energy units, not a
+validated force field; turn it off in the toolbox or run it explicitly with **Tidy** (T). MMFF94
+optimisation is available through the server engine.
+
+**Import / export** (Ctrl+O / Ctrl+S): MCAD JSON (lossless), MOL V2000, SDF (multi-record with data
+items) and SMILES. Every import is parsed, validated and shown with its issues before it reaches
+the editor; imports with errors are blocked. SMILES import through the in-browser engine yields a
+3D sketch (RDKit 2D layout lifted by the clean-up; stereocentres not guaranteed); through the server
+engine it yields an ETKDG conformer that honours the SMILES stereochemistry. Flat 2D MOL input is
+lifted into 3D on request.
 
 ## Principles
 
