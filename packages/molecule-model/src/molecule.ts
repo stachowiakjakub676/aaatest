@@ -16,15 +16,24 @@ export function bondOrderValue(order: BondOrder): number {
 
 export const BOND_ORDERS: readonly BondOrder[] = ["single", "double", "triple", "aromatic"];
 
-let counter = 0;
-/** Unique ids for interactive use; importers should provide their own stable ids. */
+const counters = new Map<string, number>();
+/** Unique ids for interactive use (one counter per prefix); importers should provide their own stable ids. */
 export function nextId(prefix: string): string {
-  counter += 1;
-  return `${prefix}${counter}`;
+  const n = (counters.get(prefix) ?? 0) + 1;
+  counters.set(prefix, n);
+  return `${prefix}${n}`;
 }
-/** Test hook: reset the id counter. */
+/** Test hook: reset the id counters. */
 export function resetIdCounter(): void {
-  counter = 0;
+  counters.clear();
+}
+
+/** Next generated id that is not already used by an atom or bond of `mol`. */
+export function uniqueId(mol: Molecule, prefix: string): string {
+  const used = new Set<string>([...mol.atoms.map((a) => a.id), ...mol.bonds.map((b) => b.id)]);
+  let id = nextId(prefix);
+  while (used.has(id)) id = nextId(prefix);
+  return id;
 }
 
 export function createMolecule(init: Partial<Omit<Molecule, "schemaVersion">> = {}): Molecule {
@@ -91,7 +100,7 @@ export interface AtomInit {
 
 export function addAtom(mol: Molecule, init: AtomInit): { molecule: Molecule; atom: Atom } {
   const atom: Atom = {
-    id: init.id ?? nextId("a"),
+    id: init.id ?? uniqueId(mol, "a"),
     element: init.element,
     formalCharge: init.formalCharge ?? 0,
     position: { ...init.position },
@@ -141,7 +150,7 @@ export function addBond(mol: Molecule, init: BondInit): { molecule: Molecule; bo
     throw new Error(`Bond already exists between ${init.atomA} and ${init.atomB}`);
   }
   const bond: Bond = {
-    id: init.id ?? nextId("b"),
+    id: init.id ?? uniqueId(mol, "b"),
     atomA: init.atomA,
     atomB: init.atomB,
     order: init.order ?? "single",

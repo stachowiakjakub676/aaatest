@@ -1,0 +1,15 @@
+{
+  "name": "@molecular-cad/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Clapeyron desktop shell (Tauri 2): Windows installer, macOS, Linux",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "icons": "tauri icon ../web/public/icons/icon-1024.png"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}

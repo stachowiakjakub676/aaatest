@@ -209,3 +209,17 @@ export function allowedValences(symbol: string, formalCharge: number): number[] 
   else adjust = (v) => v;
   return e.valences.map(adjust).filter((v) => v >= 0);
 }
+
+/** Van der Waals radii (Å): Bondi 1964 / Mantina 2009 for common elements; others fall back. */
+const VDW: Readonly<Record<string, number>> = {
+  H: 1.1, He: 1.4, Li: 1.82, Be: 1.53, B: 1.92, C: 1.7, N: 1.55, O: 1.52, F: 1.47, Ne: 1.54,
+  Na: 2.27, Mg: 1.73, Al: 1.84, Si: 2.1, P: 1.8, S: 1.8, Cl: 1.75, Ar: 1.88, K: 2.75, Ca: 2.31,
+  Ni: 1.63, Cu: 1.4, Zn: 1.39, Ga: 1.87, Ge: 2.11, As: 1.85, Se: 1.9, Br: 1.85, Kr: 2.02,
+  Ag: 1.72, Cd: 1.58, In: 1.93, Sn: 2.17, Sb: 2.06, Te: 2.06, I: 1.98, Xe: 2.16,
+  Pt: 1.75, Au: 1.66, Hg: 1.55, Tl: 1.96, Pb: 2.02, Bi: 2.07, U: 1.86,
+};
+export const DEFAULT_VDW_RADIUS = 2.0;
+
+export function vdwRadius(symbol: string): number {
+  return VDW[symbol] ?? DEFAULT_VDW_RADIUS;
+}

@@ -1,16 +1,19 @@
 {
-  "name": "molecular-cad",
+  "name": "clapeyron",
   "private": true,
   "version": "0.1.0",
-  "description": "CAD-like 3D molecular design application (prototype)",
+  "description": "Clapeyron: CAD-like 3D molecular design application (prototype)",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck",
-    "build": "pnpm -r --if-present build",
-    "dev": "pnpm --filter @molecular-cad/web dev"
+    "build": "pnpm -r --if-present --filter '!@molecular-cad/desktop' build",
+    "build:desktop": "pnpm --filter @molecular-cad/desktop build",
+    "dev": "pnpm --filter @molecular-cad/web dev",
+    "test:e2e": "playwright test -c tests/e2e/playwright.config.ts"
   },
   "devDependencies": {
+    "@playwright/test": "1.56.1",
     "typescript": "^5.9.0"
   }
 }
