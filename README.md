@@ -244,6 +244,21 @@ generation, filtering, ranking and comparison follow in phases 3B–3F on the sa
 - **Builder.** Property pickers grouped by domain show the method and error next to every
   requirement; live validation; element chips, heavy-atom range, neutrality, SMARTS lists (checked
   by RDKit from phase 3B); autosave in the browser; import/export as JSON.
+- **Candidates (phase 3B).** *Generate and validate* runs a `CandidateGenerator` and records every
+  candidate with its provenance. Two deterministic generators ship: *derivatives of the editor
+  molecule* (each library fragment attached at each hydrogen-bearing C, N or O of the seed, one
+  substitution per candidate, sites and fragments in a fixed order) and a *library screen* (the
+  248 building blocks and the 46 solvents, parsed through the engine). Validation runs in stages
+  and keeps the stage and reason of every rejection: structural scope (elements, heavy atoms,
+  charge) → graph validity (valence, connectivity) → RDKit sanitisation → duplicates by canonical
+  SMILES → required and forbidden SMARTS (matched by RDKit in the browser). Nothing invalid reaches
+  later stages. A run stores the specification snapshot, generator and parameters, seed, engine
+  version and timestamps and exports as `kind: "clapeyron-design-run"`; any candidate opens in a
+  new editor tab. Property evaluation and filtering follow in phase 3C.
+- **Margins.** Predicted properties carry a typical error (13 K for the Joback boiling point,
+  1 log unit for ESOL, …). A miss smaller than that error is reported as *borderline*, not as a
+  fail, so a candidate is never rejected on a difference the model cannot resolve; the builder
+  shows the margin next to each property and marks the ones that need the server engine.
 - **Requirement sheet and live check.** The right pane renders the specification in words and
   checks the molecule open in the editor against it, using the same descriptors and predictions
   the Chemistry tab shows (`design/profile.ts` maps them onto the catalogue): each row carries

@@ -65,3 +65,44 @@ test("design workspace: build a specification, validate it and check the open mo
   await expect(page.locator(".viewport-area")).toBeVisible();
   expect(errors.list).toEqual([]);
 });
+
+test("design workspace: generate derivatives of the editor molecule, validate them and open one", async ({ page }) => {
+  const errors = await openApp(page);
+  await page.selectOption("#sample-select", "ethanol");
+  await page.click("#tab-chemistry");
+  await expect(page.locator("#estimates")).toContainText("Normal boiling point", { timeout: 30_000 });
+  await page.click("#view-design");
+  await page.click("#btn-spec-new");
+  await page.fill("#spec-name", "Small alcohols");
+  await page.click("#allow-C");
+  await page.click("#allow-O");
+  await page.fill("#heavy-max", "5");
+  await page.fill("#spec-required", "[OX2H]");
+  await page.locator("#spec-required").blur();
+  await page.fill("#gen-limit", "40");
+  await page.click("#btn-generate");
+  await expect(page.locator("#run-summary")).toContainText("valid", { timeout: 60_000 });
+  await expect(page.locator("#run-summary")).toContainText("of 40");
+  const rows = page.locator(".candidate-table tbody tr");
+  await expect(rows).toHaveCount(40);
+  await expect(page.locator(".candidate-table tr.cand-valid").first()).toBeVisible();
+  await expect(page.locator(".candidate-table")).toContainText("attach Methyl (C) at C");
+  await expect(page.locator(".candidate-table")).toContainText("lacks required substructure [OX2H]"); // methyl on the OH oxygen
+  await expect(page.locator(".candidate-table")).toContainText("heavy atoms, more than 5");
+  await expect(page.locator("#candidates")).toContainText("rdkit-wasm");
+  await page.uncheck("#show-rejected");
+  expect(await rows.count()).toBeLessThan(40);
+  // Open the first valid candidate: it becomes a new editor tab, the seed stays.
+  await page.locator(".candidate-table tr.cand-valid").first().getByRole("button", { name: "Open" }).click();
+  await expect(page.locator(".viewport-area")).toBeVisible();
+  await expect(page.locator(".doc-tabs [role=tab]")).toHaveCount(2);
+  await expect(page.locator(".doc-tabs [role=tab][aria-selected=true]")).toContainText("Ethanol + Methyl");
+  // A borderline verdict: the seed's predicted boiling point misses a tight range by less than the model error.
+  await page.click("#view-design");
+  await page.click("#btn-add-constraint");
+  const row = page.locator(".constraint-row").first();
+  await row.getByLabel("Lower bound").fill("70");
+  await row.getByLabel("Upper bound").fill("90");
+  await expect(page.locator("#preview-overall")).toHaveText("△ borderline");
+  expect(errors.list).toEqual([]);
+});

@@ -34,6 +34,8 @@ import { RetroPanel } from "./ui/RetroPanel";
 import { PhasePanel } from "./ui/PhasePanel";
 import { DesignView } from "./ui/design/DesignView";
 import { useSpecification } from "./design/useSpecification";
+import { useDesignRun } from "./design/useDesignRun";
+import type { CandidateRecord } from "@molecular-cad/design-engine";
 import { MaterialsPanel } from "./ui/MaterialsPanel";
 import { RULE_ANALYSIS } from "./ai/analysis";
 import { applySuggestion } from "./ai/suggestions";
@@ -116,6 +118,19 @@ export function App() {
   const [tab, setTab] = useState<RightTab>("inspect");
   const [view, setView] = useState<"editor" | "design">("editor");
   const specification = useSpecification();
+  const designRun = useDesignRun(wasmEngine, "0.1.0");
+  const openCandidate = useCallback(
+    (r: CandidateRecord) => {
+      const tidy = cleanupGeometry(r.candidate.molecule, { maxIterations: TIDY_ITERATIONS }).molecule;
+      const doc: Doc = { id: newDocId(), history: createHistory({ ...tidy, name: r.candidate.name }, `Opened candidate ${r.candidate.name}`) };
+      setWorkspace((w) => ({ docs: [...w.docs, doc], activeId: doc.id }));
+      setSelection(EMPTY_SELECTION);
+      setPendingAtomId(null);
+      setMode("select");
+      setView("editor");
+    },
+    [],
+  );
   // Phase 7: assistant state. Phase 8: retrosynthesis state.
   const [explainer, setExplainer] = useState<ExplainerChoice>("template");
   const [explanation, setExplanation] = useState<Explanation | null>(null);
@@ -586,7 +601,7 @@ export function App() {
         </div>
       </header>
 
-      {view === "design" && <DesignView api={specification} molecule={molecule} chemistry={chemistry.state} onOpenEditor={() => setView("editor")} />}
+      {view === "design" && <DesignView api={specification} runApi={designRun} molecule={molecule} chemistry={chemistry.state} onOpenEditor={() => setView("editor")} onOpenCandidate={openCandidate} />}
       {view === "editor" && (
       <Toolbox
         mode={mode}

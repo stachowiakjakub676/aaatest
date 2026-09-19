@@ -1,20 +1,24 @@
 import { useMemo } from "react";
 import { PROPERTY_BY_KEY, describePreference, describeStructural, evaluateSpecification, hasErrors } from "@molecular-cad/design-engine";
-import type { CheckStatus, PropertyValue } from "@molecular-cad/design-engine";
+import type { CandidateRecord, CheckStatus, PropertyValue } from "@molecular-cad/design-engine";
 import type { Molecule } from "@molecular-cad/molecule-model";
 import type { ChemistryState } from "../../chemistry/useChemistry";
 import { profileFromChemistry } from "../../design/profile";
 import type { SpecificationApi } from "../../design/useSpecification";
+import type { DesignRunApi } from "../../design/useDesignRun";
 import { SpecificationBuilder } from "./SpecificationBuilder";
+import { CandidatesPanel } from "./CandidatesPanel";
 
 export interface DesignViewProps {
   api: SpecificationApi;
+  runApi: DesignRunApi;
   molecule: Molecule;
   chemistry: ChemistryState;
   onOpenEditor(): void;
+  onOpenCandidate(record: CandidateRecord): void;
 }
 
-const STATUS_LABEL: Record<CheckStatus, string> = { pass: "✓ pass", fail: "✗ fail", unknown: "? unknown" };
+const STATUS_LABEL: Record<CheckStatus, string> = { pass: "✓ pass", fail: "✗ fail", borderline: "△ borderline", unknown: "? unknown" };
 
 function fmt(v: number | string): string {
   return typeof v === "number" ? (Number.isInteger(v) ? String(v) : v.toFixed(Math.abs(v) < 10 ? 2 : 1)) : v;
@@ -39,7 +43,7 @@ function Actual({ value }: { value: PropertyValue | null }) {
  * live check of the molecule open in the editor on the right. Candidate generation, filtering
  * and comparison plug into the same evaluation in later phases.
  */
-export function DesignView({ api, molecule, chemistry, onOpenEditor }: DesignViewProps) {
+export function DesignView({ api, runApi, molecule, chemistry, onOpenEditor, onOpenCandidate }: DesignViewProps) {
   const { spec, issues } = api;
   const profile = useMemo(() => profileFromChemistry(molecule, chemistry), [molecule, chemistry]);
   const hasAtoms = molecule.atoms.length > 0;
@@ -90,7 +94,7 @@ export function DesignView({ api, molecule, chemistry, onOpenEditor }: DesignVie
                     {STATUS_LABEL[result.overall]}
                   </span>{" "}
                   <span className="muted">
-                    {result.counts.pass} pass · {result.counts.fail} fail · {result.counts.unknown} unknown
+                    {result.counts.pass} pass · {result.counts.fail} fail · {result.counts.borderline} borderline · {result.counts.unknown} unknown
                   </span>
                 </span>
               </div>
@@ -147,13 +151,14 @@ export function DesignView({ api, molecule, chemistry, onOpenEditor }: DesignVie
                   </table>
                 </>
               )}
-              <p className="hint">Hover a row for the reason. Predicted values carry their model error: a pass or fail within that error is not decisive. Substructure rules and generated candidates come with phase 3B.</p>
+              <p className="hint">Hover a row for the reason. A miss smaller than the model's typical error is marked borderline rather than failed. Substructure rules are checked on generated candidates below.</p>
               <button type="button" className="btn btn-small" id="btn-open-editor" onClick={onOpenEditor}>
                 Back to the editor
               </button>
             </>
           )}
         </section>
+        <CandidatesPanel api={runApi} spec={spec} issues={issues} seed={molecule} onOpenCandidate={onOpenCandidate} />
       </div>
     </section>
   );

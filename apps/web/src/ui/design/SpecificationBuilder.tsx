@@ -70,6 +70,8 @@ function ConstraintRow({ c, issues, onChange, onRemove }: { c: HardConstraint; i
         <p className="hint provenance">
           <span className={`tag tag-${def.kind === "computed" ? "computed" : "predicted"}`}>{def.kind}</span> {def.method}
           {def.uncertainty ? ` · ${def.uncertainty}` : ""}
+          {def.errorAbs !== undefined ? ` · margin ±${def.errorAbs}${def.unit ? ` ${def.unit}` : ""}` : ""}
+          {def.requires === "server" ? <span className="warn-text"> · needs the server engine (unknown with RDKit in the browser)</span> : null}
         </p>
       )}
       {issues.map((i, k) => (

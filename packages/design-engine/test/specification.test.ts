@@ -87,7 +87,7 @@ describe("evaluation", () => {
     const spec: Specification = { ...createSpecification("s"), hard: [{ id: "1", property: "tb", op: "between", min: 60, max: 80 }, { id: "2", property: "logS", op: ">=", min: -2 }] };
     const r = evaluateSpecification(spec, profile, getSampleMolecule("ethanol")!);
     expect(r.overall).toBe("unknown");
-    expect(r.counts).toEqual({ pass: 1, fail: 0, unknown: 1 });
+    expect(r.counts).toEqual({ pass: 1, fail: 0, borderline: 0, unknown: 1 });
     const r2 = evaluateSpecification({ ...spec, hard: [spec.hard[0]!, { id: "3", property: "mw", op: "<=", max: 40 }] }, profile, null);
     expect(r2.overall).toBe("fail");
     expect(evaluateSpecification({ ...spec, hard: [spec.hard[0]!] }, profile, null).overall).toBe("pass");

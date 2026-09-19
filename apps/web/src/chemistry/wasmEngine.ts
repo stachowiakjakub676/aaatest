@@ -19,6 +19,8 @@ export interface RDKitMol {
   get_molblock(details?: string): string;
   /** JSON array of {atoms, bonds} index lists for a query molecule from get_qmol (unique matches). */
   get_substruct_matches(query: RDKitMol, details?: string): string;
+  /** JSON {atoms, bonds} of the first match, or "{}" when none. */
+  get_substruct_match(query: RDKitMol, details?: string): string;
   get_stereo_tags(): string;
   get_num_atoms(): number;
   add_hs_in_place(): boolean;
@@ -123,6 +125,31 @@ export class WasmRdkitEngine implements ChemistryEngine {
   async ready(): Promise<{ version: string }> {
     await this.module();
     return { version: this.version };
+  }
+
+  /** Substructure test with a SMARTS pattern; null when the pattern does not parse or the molecule is rejected. */
+  async hasSubstructure(mol: Molecule, smarts: string): Promise<boolean | null> {
+    const RDKit = await this.module();
+    const q = RDKit.get_qmol(smarts);
+    if (!q || !q.is_valid()) {
+      q?.delete();
+      return null;
+    }
+    const { rd } = await this.parse(mol);
+    if (!rd) {
+      q.delete();
+      return null;
+    }
+    try {
+      const text = rd.get_substruct_match(q);
+      const parsed = JSON.parse(text) as { atoms?: number[] };
+      return Array.isArray(parsed.atoms) && parsed.atoms.length > 0;
+    } catch {
+      return false;
+    } finally {
+      rd.delete();
+      q.delete();
+    }
   }
 
   /** UNIFAC subgroup assignment by SMARTS matching (see unifacFragment.ts). */

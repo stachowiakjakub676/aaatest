@@ -23,7 +23,13 @@ export interface PropertyValue {
 /** Catalogue key → value with provenance. */
 export type CandidateProfile = Record<string, PropertyValue>;
 
-export type CheckStatus = "pass" | "fail" | "unknown";
+/** "borderline": the value violates the requirement by less than the model's typical error. */
+export type CheckStatus = "pass" | "fail" | "borderline" | "unknown";
+
+export interface EvaluationOptions {
+  /** Soften fails that lie within the model error of the bound to "borderline" (default true). */
+  margins?: boolean;
+}
 
 export interface ConstraintResult {
   constraintId: string;
@@ -52,7 +58,8 @@ function fmt(v: number | string): string {
   return typeof v === "number" ? (Number.isInteger(v) ? String(v) : v.toFixed(Math.abs(v) < 10 ? 2 : 1)) : v;
 }
 
-export function checkConstraint(c: HardConstraint, profile: CandidateProfile): ConstraintResult {
+export function checkConstraint(c: HardConstraint, profile: CandidateProfile, opts: EvaluationOptions = {}): ConstraintResult {
+  const margins = opts.margins ?? true;
   const def = PROPERTY_BY_KEY.get(c.property);
   const requirement = describeConstraint(c);
   const actual = profile[c.property] ?? null;
@@ -74,7 +81,11 @@ export function checkConstraint(c: HardConstraint, profile: CandidateProfile): C
   const ok = lowOk && highOk;
   const where = !lowOk ? `${fmt(v)}${unit} is below ${c.min}${unit}` : !highOk ? `${fmt(v)}${unit} is above ${c.max}${unit}` : `${fmt(v)}${unit} is within the requirement`;
   const caveat = actual.kind === "predicted" || actual.kind === "estimated" ? ` (${actual.kind}: ${actual.uncertainty ?? "uncertainty not stated"})` : "";
-  return { ...base, status: ok ? "pass" : "fail", reason: where + caveat };
+  if (ok) return { ...base, status: "pass", reason: where + caveat };
+  const error = def.errorAbs ?? (def.errorRel !== undefined ? Math.abs(v) * def.errorRel : 0);
+  const miss = !lowOk ? c.min! - v : v - c.max!;
+  if (margins && error > 0 && miss <= error) return { ...base, status: "borderline", reason: `${where}, but by ${fmt(miss)}${unit}, less than the model's typical error (${fmt(error)}${unit}); not decisive${caveat}` };
+  return { ...base, status: "fail", reason: where + caveat };
 }
 
 /** Structural rules that follow from the graph alone; substructure patterns need the chemistry engine and stay unknown here. */
@@ -111,11 +122,11 @@ export function checkStructural(st: StructuralConstraints, mol: Molecule): Struc
   return out;
 }
 
-export function evaluateSpecification(spec: Specification, profile: CandidateProfile, mol: Molecule | null): EvaluationResult {
-  const constraints = spec.hard.map((c) => checkConstraint(c, profile));
+export function evaluateSpecification(spec: Specification, profile: CandidateProfile, mol: Molecule | null, opts: EvaluationOptions = {}): EvaluationResult {
+  const constraints = spec.hard.map((c) => checkConstraint(c, profile, opts));
   const structural = mol ? checkStructural(spec.structural, mol) : [];
-  const counts: Record<CheckStatus, number> = { pass: 0, fail: 0, unknown: 0 };
+  const counts: Record<CheckStatus, number> = { pass: 0, fail: 0, borderline: 0, unknown: 0 };
   for (const r of [...constraints, ...structural]) counts[r.status] += 1;
-  const overall: CheckStatus = counts.fail > 0 ? "fail" : counts.unknown > 0 ? "unknown" : "pass";
+  const overall: CheckStatus = counts.fail > 0 ? "fail" : counts.borderline > 0 ? "borderline" : counts.unknown > 0 ? "unknown" : "pass";
   return { overall, constraints, structural, counts };
 }

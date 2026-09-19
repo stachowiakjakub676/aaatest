@@ -1619,3 +1619,14 @@ textarea.input {
     overflow-y: auto;
   }
 }
+
+.candidate-table td .small,
+.candidate-table .small {
+  font-size: 11px;
+}
+.candidate-table tr.cand-rejected td {
+  opacity: 0.75;
+}
+.check-table tr.check-borderline td:last-child {
+  color: var(--warn);
+}
