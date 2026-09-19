@@ -64,6 +64,19 @@ describe("atom operations", () => {
     expect(molecule.atoms[0]!.position.x).toBe(1);
   });
 
+  it("never generates an id that collides with existing atoms or bonds (regression)", () => {
+    resetIdCounter();
+    const mol = createMolecule({
+      id: "loaded",
+      atoms: [1, 2, 3].map((i) => ({ id: `a${i}`, element: "C", formalCharge: 0, position: { x: i, y: 0, z: 0 } })),
+      bonds: [{ id: "b1", atomA: "a1", atomB: "a2", order: "single" }],
+    });
+    const { molecule, atom } = addAtom(mol, { element: "N", position: O });
+    expect(["a1", "a2", "a3"]).not.toContain(atom.id);
+    const { bond } = addBond(molecule, { atomA: atom.id, atomB: "a3" });
+    expect(bond.id).not.toBe("b1");
+  });
+
   it("rejects duplicate atom ids", () => {
     const { molecule } = addAtom(createMolecule({ id: "m" }), { element: "C", position: O, id: "C1" });
     expect(() => addAtom(molecule, { element: "N", position: O, id: "C1" })).toThrow(/already exists/);
