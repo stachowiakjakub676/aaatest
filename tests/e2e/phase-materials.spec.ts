@@ -91,26 +91,31 @@ test("mixtures: ideal distillation with a literature azeotrope warning, and cool
   // Ethanol + water: the ideal T–x–y is drawn, but the literature azeotrope is flagged.
   await page.selectOption("#mix-solvent", "water");
   await expect(page.locator("#dist-light")).toContainText("Ethanol", { timeout: 20_000 });
+  await expect(page.locator("#dist-model")).toHaveText("UNIFAC", { timeout: 20_000 });
+  await expect(page.locator("#dist-verdict")).toHaveText("azeotropic");
+  await expect(page.locator("#azeotrope-predicted")).toContainText(/x\(Ethanol\) = 0\.(8|9)\d, 7[6-9]\.\d °C, minimum-boiling/);
   await expect(page.locator("#azeotrope")).toContainText("78.2 °C");
   await expect(page.locator("#distillation .xy-chart path.series")).toHaveCount(2);
-  // Ethanol + toluene: no azeotrope in the table for the drawn direction? (there is: 76.7 °C) → warning again
+  // Ethanol + toluene: literature azeotrope at 76.7 °C is shown next to the prediction.
   await page.selectOption("#mix-solvent", "toluene");
   await expect(page.locator("#azeotrope")).toContainText("76.7 °C", { timeout: 20_000 });
   // Ethanol + heptane… skip; ethanol + DMSO: far apart, easy, no literature azeotrope → Hansen text instead.
   await page.selectOption("#mix-solvent", "dmf");
   await expect(page.locator("#dist-verdict")).toHaveText("easy", { timeout: 20_000 });
-  await expect(page.locator("#nonideality")).toContainText("Hansen distance");
-  // A measured boiling point re-anchors the vapour curve.
-  await page.locator("#phase summary").click();
-  await page.fill("#meas-tb", "78.4");
-  await expect(page.locator("#phase")).toContainText("78.4 °C (measured)");
-  await expect(page.locator("#dist-light")).toContainText("78.4 °C");
+  await expect(page.locator("#dist-model")).toHaveText("UNIFAC");
+  // Ethanol is recognised in the solvent table, so its measured boiling point anchors the curve; typing one overrides it.
+  await expect(page.locator("#phase")).toContainText("78.4 °C (measured: recognised as Ethanol)");
+  await page.locator("#phase details").evaluate((d) => ((d as HTMLDetailsElement).open = true));
+  await page.fill("#meas-tb", "78.0");
+  await expect(page.locator("#phase")).toContainText("78.0 °C (measured)");
+  await expect(page.locator("#dist-light")).toContainText("78.0 °C");
 
   // Crystallisation of a solid: aspirin from ethanol, 60 → 0 °C.
   await page.selectOption("#sample-select", "aspirin");
   await page.click("#tab-phase");
   await page.selectOption("#mix-solvent", "ethanol");
   await expect(page.locator("#cryst-hot-s")).toContainText("g / 100 g solvent", { timeout: 20_000 });
+  await expect(page.locator("#cryst-model")).toContainText("UNIFAC (γ =", { timeout: 20_000 });
   const recovery = Number(/(\d+) %/.exec(await page.locator("#cryst-recovery").innerText())?.[1]);
   expect(recovery).toBeGreaterThan(50);
   await expect(page.locator("#crystallisation .xy-chart path.series")).toHaveCount(1);

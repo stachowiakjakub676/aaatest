@@ -17,3 +17,5 @@ export * from "./groupContribution";
 export * from "./phase";
 export * from "./hansen";
 export * from "./mixtures";
+export * from "./unifacData";
+export * from "./unifac";

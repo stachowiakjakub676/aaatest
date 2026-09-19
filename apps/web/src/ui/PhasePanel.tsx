@@ -1,16 +1,18 @@
-import { useMemo, useState } from "react";
-import { PRESSURE_UNITS, acentricFactor, boilingPointAtPressure, girolamiDensity, jobackEstimates, molecularWeight, phaseAt, phaseModel, vapourPressure, watsonHvap } from "@molecular-cad/molecule-model";
+import { useEffect, useMemo, useState } from "react";
+import { PRESSURE_UNITS, SOLVENTS, acentricFactor, boilingPointAtPressure, girolamiDensity, jobackEstimates, molecularWeight, phaseAt, phaseModel, vapourPressure, watsonHvap } from "@molecular-cad/molecule-model";
 import type { Molecule, PhaseInputs } from "@molecular-cad/molecule-model";
 import { PhaseDiagram } from "./PhaseDiagram";
 import { MixtureSection } from "./MixtureSection";
-import { targetComponent } from "../chemistry/components";
+import { solventComponent, targetComponent } from "../chemistry/components";
 import type { ChemistryEngine } from "../chemistry/engine";
+import type { UnifacFragmenter } from "../chemistry/components";
 
 export interface PhasePanelProps {
   molecule: Molecule;
   /** Molar mass from the chemistry engine (falls back to the model's own weight). */
   molarMass: number | undefined;
   engine: ChemistryEngine;
+  fragmenter: UnifacFragmenter;
   /** Canonical SMILES from the engine (null while unavailable). */
   canonicalSmiles: string | null;
 }
@@ -48,7 +50,7 @@ function Row({ label, value, title }: { label: string; value: React.ReactNode; t
   );
 }
 
-export function PhasePanel({ molecule, molarMass, engine, canonicalSmiles }: PhasePanelProps) {
+export function PhasePanel({ molecule, molarMass, engine, fragmenter, canonicalSmiles }: PhasePanelProps) {
   const [pValue, setPValue] = useState("20");
   const [pUnit, setPUnit] = useState<Unit>("mbar");
   const [tValue, setTValue] = useState("25");
@@ -56,7 +58,22 @@ export function PhasePanel({ molecule, molarMass, engine, canonicalSmiles }: Pha
   const [tmText, setTmText] = useState("");
   const [hfusText, setHfusText] = useState("");
   const heavy = molecule.atoms.filter((a) => a.element !== "H").length;
-  const overrides = useMemo(() => ({ tb: parseOverride(tbText, true), tm: parseOverride(tmText, true), hfus: parseOverride(hfusText, false) }), [tbText, tmText, hfusText]);
+  // The drawn molecule may be one of the tabulated solvents: then its measured boiling point is known.
+  const [recognised, setRecognised] = useState<{ id: string; name: string; bp: number } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setRecognised(null);
+    if (!canonicalSmiles) return;
+    void Promise.all(SOLVENTS.map((s) => solventComponent(engine, fragmenter, s.id))).then((all) => {
+      if (cancelled) return;
+      const hit = all.find((s) => s && s.canonicalSmiles === canonicalSmiles);
+      setRecognised(hit ? { id: hit.solvent.id, name: hit.solvent.name, bp: hit.solvent.bp } : null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [engine, fragmenter, canonicalSmiles]);
+  const overrides = useMemo(() => ({ tb: parseOverride(tbText, true) ?? (recognised ? recognised.bp + 273.15 : null), tm: parseOverride(tmText, true), hfus: parseOverride(hfusText, false) }), [tbText, tmText, hfusText, recognised]);
 
   const data = useMemo(() => {
     if (heavy === 0) return null;
@@ -107,7 +124,7 @@ export function PhasePanel({ molecule, molarMass, engine, canonicalSmiles }: Pha
         <h2 className="panel-title">
           Phase behaviour <span className="tag tag-predicted">predicted</span>
         </h2>
-        <Row label="Normal boiling point" value={`${r1(input.tb - 273.15)} °C${overrides.tb !== null ? " (measured)" : ""}`} title="Joback unless measured" />
+        <Row label="Normal boiling point" value={`${r1(input.tb - 273.15)} °C${overrides.tb !== null ? (tbText.trim() === "" && recognised ? ` (measured: recognised as ${recognised.name})` : " (measured)") : ""}`} title="Joback unless measured" />
         <Row label="Melting point" value={input.tm ? `${r1(input.tm - 273.15)} °C${overrides.tm !== null ? " (measured)" : ""}` : "not estimated"} title="Joback (least reliable property) unless measured" />
         <Row label="Critical point" value={`${r1(input.tc - 273.15)} °C, ${r1(input.pc)} bar`} title="Joback Tc and pc" />
         <Row label="Acentric factor ω" value={omega.toFixed(3)} title="Lee–Kesler, from Tb/Tc and pc" />
@@ -131,7 +148,7 @@ export function PhasePanel({ molecule, molarMass, engine, canonicalSmiles }: Pha
               <input id="meas-hfus" className="input mono" inputMode="decimal" value={hfusText} onChange={(e) => setHfusText(e.target.value)} placeholder={data.j.hfus === null ? "—" : r1(data.j.hfus)} />
             </label>
           </div>
-          <p className="hint">If you know a value from a data sheet, enter it: the vapour curve is then anchored at the measured boiling point (ω is recomputed) and the solid boundaries and crystallisation use the measured Tm and ΔHfus. Blank fields keep the estimates.</p>
+          <p className="hint">If you know a value from a data sheet, enter it: the vapour curve is then anchored at the measured boiling point (ω is recomputed) and the solid boundaries and crystallisation use the measured Tm and ΔHfus. Blank fields keep the estimates{recognised ? `, except that the boiling point of ${recognised.name} is taken from the solvent table` : ""}.</p>
         </details>
       </section>
 
@@ -190,7 +207,7 @@ export function PhasePanel({ molecule, molarMass, engine, canonicalSmiles }: Pha
         )}
         <p className="hint">Hover the diagram to read the phase at any point. Melting line: Clapeyron slope with ΔVfus ≈ 10 % of the molar volume; the sublimation line uses ΔHsub = ΔHfus + ΔHvap at the triple point.</p>
       </section>
-      <MixtureSection engine={engine} target={target} targetCanonical={canonicalSmiles} />
+      <MixtureSection engine={engine} fragmenter={fragmenter} molecule={molecule} target={target} targetId={recognised?.id ?? null} />
     </>
   );
 }

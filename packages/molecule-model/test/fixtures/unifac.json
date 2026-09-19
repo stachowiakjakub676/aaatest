@@ -1,0 +1,1011 @@
+{
+ "thermo": "0.6.1",
+ "assignments": [
+  {
+   "name": "water",
+   "smiles": "O",
+   "success": true,
+   "groups": {
+    "16": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "ethanol",
+   "smiles": "CCO",
+   "success": true,
+   "groups": {
+    "1": 1,
+    "2": 1,
+    "14": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "2-propanol",
+   "smiles": "CC(C)O",
+   "success": true,
+   "groups": {
+    "1": 2,
+    "3": 1,
+    "14": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "1-butanol",
+   "smiles": "CCCCO",
+   "success": true,
+   "groups": {
+    "1": 1,
+    "2": 3,
+    "14": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "ethyl-acetate",
+   "smiles": "CCOC(C)=O",
+   "success": true,
+   "groups": {
+    "1": 1,
+    "2": 1,
+    "21": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "isopropyl-acetate",
+   "smiles": "CC(C)OC(C)=O",
+   "success": true,
+   "groups": {
+    "1": 2,
+    "3": 1,
+    "21": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "butyl-acetate",
+   "smiles": "CCCCOC(C)=O",
+   "success": true,
+   "groups": {
+    "1": 1,
+    "2": 3,
+    "21": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "anisole",
+   "smiles": "COc1ccccc1",
+   "success": true,
+   "groups": {
+    "9": 5,
+    "10": 1,
+    "24": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "sulfolane",
+   "smiles": "O=S1(=O)CCCC1",
+   "success": true,
+   "groups": {
+    "2": 2,
+    "118": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "methanol",
+   "smiles": "CO",
+   "success": true,
+   "groups": {
+    "15": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "tert-butanol",
+   "smiles": "CC(C)(C)O",
+   "success": true,
+   "groups": {
+    "1": 3,
+    "4": 1,
+    "14": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "benzyl-alcohol",
+   "smiles": "OCc1ccccc1",
+   "success": true,
+   "groups": {
+    "9": 5,
+    "12": 1,
+    "14": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "ethylene-glycol",
+   "smiles": "OCCO",
+   "success": true,
+   "groups": {
+    "62": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "acetone",
+   "smiles": "CC(C)=O",
+   "success": true,
+   "groups": {
+    "1": 1,
+    "18": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "mek",
+   "smiles": "CCC(C)=O",
+   "success": true,
+   "groups": {
+    "1": 1,
+    "2": 1,
+    "18": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "mibk",
+   "smiles": "CC(C)CC(C)=O",
+   "success": true,
+   "groups": {
+    "1": 2,
+    "2": 1,
+    "3": 1,
+    "18": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "cyclohexanone",
+   "smiles": "O=C1CCCCC1",
+   "success": true,
+   "groups": {
+    "2": 4,
+    "19": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "methyl-acetate",
+   "smiles": "COC(C)=O",
+   "success": true,
+   "groups": {
+    "1": 1,
+    "21": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "acetic-acid",
+   "smiles": "CC(O)=O",
+   "success": true,
+   "groups": {
+    "1": 1,
+    "42": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "acetic-anhydride",
+   "smiles": "CC(=O)OC(C)=O",
+   "success": true,
+   "groups": {
+    "18": 1,
+    "21": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "thf",
+   "smiles": "C1CCOC1",
+   "success": true,
+   "groups": {
+    "2": 3,
+    "27": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "2-methf",
+   "smiles": "CC1CCCO1",
+   "success": true,
+   "groups": {
+    "1": 1,
+    "2": 2,
+    "3": 1,
+    "27": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "heptane",
+   "smiles": "CCCCCCC",
+   "success": true,
+   "groups": {
+    "1": 2,
+    "2": 5
+   },
+   "status": "OK"
+  },
+  {
+   "name": "methylcyclohexane",
+   "smiles": "CC1CCCCC1",
+   "success": true,
+   "groups": {
+    "1": 1,
+    "2": 5,
+    "3": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "toluene",
+   "smiles": "Cc1ccccc1",
+   "success": true,
+   "groups": {
+    "9": 5,
+    "11": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "xylene",
+   "smiles": "Cc1ccccc1C",
+   "success": true,
+   "groups": {
+    "9": 4,
+    "11": 2
+   },
+   "status": "OK"
+  },
+  {
+   "name": "chlorobenzene",
+   "smiles": "Clc1ccccc1",
+   "success": true,
+   "groups": {
+    "9": 5,
+    "53": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "acetonitrile",
+   "smiles": "CC#N",
+   "success": true,
+   "groups": {
+    "40": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "dmso",
+   "smiles": "CS(C)=O",
+   "success": true,
+   "groups": {
+    "67": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "mtbe",
+   "smiles": "COC(C)(C)C",
+   "success": true,
+   "groups": {
+    "1": 3,
+    "4": 1,
+    "24": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "cyclohexane",
+   "smiles": "C1CCCCC1",
+   "success": true,
+   "groups": {
+    "2": 6
+   },
+   "status": "OK"
+  },
+  {
+   "name": "dcm",
+   "smiles": "ClCCl",
+   "success": true,
+   "groups": {
+    "47": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "formic-acid",
+   "smiles": "OC=O",
+   "success": true,
+   "groups": {
+    "43": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "pyridine",
+   "smiles": "c1ccncc1",
+   "success": true,
+   "groups": {
+    "37": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "dmf",
+   "smiles": "CN(C)C=O",
+   "success": true,
+   "groups": {
+    "72": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "dmac",
+   "smiles": "CC(=O)N(C)C",
+   "success": true,
+   "groups": {
+    "1": 1,
+    "97": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "nmp",
+   "smiles": "CN1CCCC1=O",
+   "success": true,
+   "groups": {
+    "85": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "dioxane",
+   "smiles": "C1COCCO1",
+   "success": true,
+   "groups": {
+    "2": 2,
+    "27": 2
+   },
+   "status": "OK"
+  },
+  {
+   "name": "dme",
+   "smiles": "COCCOC",
+   "success": true,
+   "groups": {
+    "2": 2,
+    "24": 2
+   },
+   "status": "OK"
+  },
+  {
+   "name": "pentane",
+   "smiles": "CCCCC",
+   "success": true,
+   "groups": {
+    "1": 2,
+    "2": 3
+   },
+   "status": "OK"
+  },
+  {
+   "name": "hexane",
+   "smiles": "CCCCCC",
+   "success": true,
+   "groups": {
+    "1": 2,
+    "2": 4
+   },
+   "status": "OK"
+  },
+  {
+   "name": "diethyl-ether",
+   "smiles": "CCOCC",
+   "success": true,
+   "groups": {
+    "1": 2,
+    "2": 1,
+    "25": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "benzene",
+   "smiles": "c1ccccc1",
+   "success": true,
+   "groups": {
+    "9": 6
+   },
+   "status": "OK"
+  },
+  {
+   "name": "chloroform",
+   "smiles": "ClC(Cl)Cl",
+   "success": true,
+   "groups": {
+    "50": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "ccl4",
+   "smiles": "ClC(Cl)(Cl)Cl",
+   "success": true,
+   "groups": {
+    "52": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "dce",
+   "smiles": "ClCCCl",
+   "success": true,
+   "groups": {
+    "44": 2
+   },
+   "status": "OK"
+  },
+  {
+   "name": "nitromethane",
+   "smiles": "C[N+](=O)[O-]",
+   "success": true,
+   "groups": {
+    "54": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "aspirin",
+   "smiles": "CC(=O)Oc1ccccc1C(O)=O",
+   "success": true,
+   "groups": {
+    "9": 4,
+    "10": 2,
+    "21": 1,
+    "42": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "ibuprofen",
+   "smiles": "CC(C)Cc1ccc(cc1)C(C)C(O)=O",
+   "success": true,
+   "groups": {
+    "1": 3,
+    "3": 1,
+    "9": 4,
+    "12": 1,
+    "13": 1,
+    "42": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "naphthalene",
+   "smiles": "c1ccc2ccccc2c1",
+   "success": true,
+   "groups": {
+    "9": 8,
+    "10": 2
+   },
+   "status": "OK"
+  },
+  {
+   "name": "cyclohexanol",
+   "smiles": "OC1CCCCC1",
+   "success": true,
+   "groups": {
+    "2": 5,
+    "3": 1,
+    "14": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "hexanal",
+   "smiles": "CCCCCC=O",
+   "success": true,
+   "groups": {
+    "1": 1,
+    "2": 4,
+    "20": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "diethylamine",
+   "smiles": "CCNCC",
+   "success": true,
+   "groups": {
+    "1": 2,
+    "2": 1,
+    "32": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "cumene",
+   "smiles": "CC(C)c1ccccc1",
+   "success": true,
+   "groups": {
+    "1": 2,
+    "9": 5,
+    "13": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "glycerol",
+   "smiles": "OCC(O)CO",
+   "success": true,
+   "groups": {
+    "2": 2,
+    "3": 1,
+    "14": 3
+   },
+   "status": "OK"
+  },
+  {
+   "name": "phenol",
+   "smiles": "Oc1ccccc1",
+   "success": true,
+   "groups": {
+    "9": 5,
+    "17": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "nitrobenzene",
+   "smiles": "O=[N+]([O-])c1ccccc1",
+   "success": true,
+   "groups": {
+    "9": 5,
+    "57": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "1-chlorobutane",
+   "smiles": "CCCCCl",
+   "success": true,
+   "groups": {
+    "1": 1,
+    "2": 2,
+    "44": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "tert-butyl acetate",
+   "smiles": "CC(=O)OC(C)(C)C",
+   "success": true,
+   "groups": {
+    "1": 3,
+    "4": 1,
+    "21": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "propionitrile",
+   "smiles": "CCC#N",
+   "success": true,
+   "groups": {
+    "1": 1,
+    "41": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "2-methylpyridine",
+   "smiles": "Cc1ccccn1",
+   "success": true,
+   "groups": {
+    "1": 1,
+    "38": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "1-hexene",
+   "smiles": "CCCCC=C",
+   "success": true,
+   "groups": {
+    "1": 1,
+    "2": 3,
+    "5": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "isoprene",
+   "smiles": "CC(=C)C=C",
+   "success": true,
+   "groups": {
+    "1": 1,
+    "5": 1,
+    "7": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "caffeine",
+   "smiles": "Cn1cnc2c1c(=O)n(C)c(=O)n2C",
+   "success": false,
+   "groups": {},
+   "status": "Did not match all atoms present"
+  },
+  {
+   "name": "acetophenone",
+   "smiles": "CC(=O)c1ccccc1",
+   "success": true,
+   "groups": {
+    "9": 5,
+    "10": 1,
+    "18": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "ethyl benzoate",
+   "smiles": "CCOC(=O)c1ccccc1",
+   "success": true,
+   "groups": {
+    "1": 1,
+    "2": 1,
+    "9": 5,
+    "10": 1,
+    "77": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "1,2-dichloroethane",
+   "smiles": "ClCCCl",
+   "success": true,
+   "groups": {
+    "44": 2
+   },
+   "status": "OK"
+  },
+  {
+   "name": "propylene glycol",
+   "smiles": "CC(O)CO",
+   "success": true,
+   "groups": {
+    "1": 1,
+    "2": 1,
+    "3": 1,
+    "14": 2
+   },
+   "status": "OK"
+  },
+  {
+   "name": "octane",
+   "smiles": "CCCCCCCC",
+   "success": true,
+   "groups": {
+    "1": 2,
+    "2": 6
+   },
+   "status": "OK"
+  },
+  {
+   "name": "butanoic acid",
+   "smiles": "CCCC(O)=O",
+   "success": true,
+   "groups": {
+    "1": 1,
+    "2": 2,
+    "42": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "n-butylamine",
+   "smiles": "CCCCN",
+   "success": true,
+   "groups": {
+    "1": 1,
+    "2": 2,
+    "29": 1
+   },
+   "status": "OK"
+  },
+  {
+   "name": "triethylamine",
+   "smiles": "CCN(CC)CC",
+   "success": true,
+   "groups": {
+    "1": 3,
+    "2": 2,
+    "35": 1
+   },
+   "status": "OK"
+  }
+ ],
+ "gammas": [
+  {
+   "name": "acetone/pentane (Poling ex.)",
+   "groups": [
+    {
+     "1": 1,
+     "18": 1
+    },
+    {
+     "1": 2,
+     "2": 3
+    }
+   ],
+   "T": 307.0,
+   "xs": [
+    0.047,
+    0.953
+   ],
+   "gammas": [
+    4.992034311484564,
+    1.0052602111878801
+   ]
+  },
+  {
+   "name": "diethylamine/heptane (SVA app. H)",
+   "groups": [
+    {
+     "1": 2,
+     "2": 1,
+     "32": 1
+    },
+    {
+     "1": 2,
+     "2": 5
+    }
+   ],
+   "T": 308.15,
+   "xs": [
+    0.4,
+    0.6
+   ],
+   "gammas": [
+    1.1330392999346752,
+    1.0470238738018751
+   ]
+  },
+  {
+   "name": "ethanol/water",
+   "groups": [
+    {
+     "1": 1,
+     "2": 1,
+     "14": 1
+    },
+    {
+     "16": 1
+    }
+   ],
+   "T": 351.0,
+   "xs": [
+    0.5,
+    0.5
+   ],
+   "gammas": [
+    1.2313649606318673,
+    1.485361030538148
+   ]
+  },
+  {
+   "name": "ethanol/water dilute",
+   "groups": [
+    {
+     "1": 1,
+     "2": 1,
+     "14": 1
+    },
+    {
+     "16": 1
+    }
+   ],
+   "T": 351.0,
+   "xs": [
+    0.05,
+    0.95
+   ],
+   "gammas": [
+    4.635617495783354,
+    1.0101050814981416
+   ]
+  },
+  {
+   "name": "ethanol/water rich",
+   "groups": [
+    {
+     "1": 1,
+     "2": 1,
+     "14": 1
+    },
+    {
+     "16": 1
+    }
+   ],
+   "T": 351.0,
+   "xs": [
+    0.9,
+    0.1
+   ],
+   "gammas": [
+    1.0092207882617747,
+    2.331020535542007
+   ]
+  },
+  {
+   "name": "benzene/toluene",
+   "groups": [
+    {
+     "9": 6
+    },
+    {
+     "9": 5,
+     "11": 1
+    }
+   ],
+   "T": 365.0,
+   "xs": [
+    0.5,
+    0.5
+   ],
+   "gammas": [
+    0.9913281668923143,
+    0.9926156820566866
+   ]
+  },
+  {
+   "name": "ethanol/hexane",
+   "groups": [
+    {
+     "1": 1,
+     "2": 1,
+     "14": 1
+    },
+    {
+     "1": 2,
+     "2": 4
+    }
+   ],
+   "T": 330.0,
+   "xs": [
+    0.3,
+    0.7
+   ],
+   "gammas": [
+    2.595016176960572,
+    1.3210230619153687
+   ]
+  },
+  {
+   "name": "chloroform/acetone",
+   "groups": [
+    {
+     "50": 1
+    },
+    {
+     "1": 1,
+     "18": 1
+    }
+   ],
+   "T": 330.0,
+   "xs": [
+    0.5,
+    0.5
+   ],
+   "gammas": [
+    0.8154941505302851,
+    0.8404184792160014
+   ]
+  },
+  {
+   "name": "water/DMF",
+   "groups": [
+    {
+     "16": 1
+    },
+    {
+     "72": 1
+    }
+   ],
+   "T": 370.0,
+   "xs": [
+    0.4,
+    0.6
+   ],
+   "gammas": [
+    1.0800270824443985,
+    1.0013398674387255
+   ]
+  },
+  {
+   "name": "acetic acid/water",
+   "groups": [
+    {
+     "1": 1,
+     "42": 1
+    },
+    {
+     "16": 1
+    }
+   ],
+   "T": 380.0,
+   "xs": [
+    0.3,
+    0.7
+   ],
+   "gammas": [
+    1.4145191610870436,
+    1.144815368437019
+   ]
+  },
+  {
+   "name": "methanol/toluene",
+   "groups": [
+    {
+     "15": 1
+    },
+    {
+     "9": 5,
+     "11": 1
+    }
+   ],
+   "T": 340.0,
+   "xs": [
+    0.6,
+    0.4
+   ],
+   "gammas": [
+    1.35325592907738,
+    2.063321443182622
+   ]
+  },
+  {
+   "name": "aspirin/ethanol",
+   "groups": [
+    {
+     "9": 4,
+     "10": 2,
+     "21": 1,
+     "42": 1
+    },
+    {
+     "1": 1,
+     "2": 1,
+     "14": 1
+    }
+   ],
+   "T": 320.0,
+   "xs": [
+    0.1,
+    0.9
+   ],
+   "gammas": [
+    2.5223005043433906,
+    1.0312429802471808
+   ]
+  }
+ ]
+}

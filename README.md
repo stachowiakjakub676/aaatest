@@ -197,14 +197,24 @@ them against a solvent table with greenness classes.
   equal performance, and the classes are transcribed from the guide: check the source and the
   safety data sheet before acting on one.
 - **Mixtures (Phase tab, below the diagram).** Pick a solvent from the table as the second
-  component. *Distillation*: Raoult's-law T–x–y diagram from the two Lee–Kesler vapour curves,
-  boiling-point gap, relative volatility, Fenske minimum stages, a verdict (easy / normal / hard /
-  impractical), and either the literature azeotrope when the drawn molecule and the solvent are a
-  tabulated pair (ethanol–water 78.2 °C, …) or a qualitative deviation-from-ideality note from the
-  Hansen distance. *Cooling crystallisation*: ideal solubility (Schröder–van Laar) from Tm and
-  ΔHfus, solubility in g per 100 g solvent at the hot and cold temperatures, recovery fraction,
-  solvent needed per gram, the solubility curve, and a Hansen-based caution on how far below the
-  ideal value the real solubility may lie. The solvent's constants are estimated by the same
+  component. Activity coefficients come from **original UNIFAC** (Fredenslund et al.): both
+  molecules are split into UNIFAC subgroups by SMARTS matching on the in-browser RDKit (a port of
+  the priority fragmentation in the `thermo` library, checked against it on every tabulated
+  solvent and two dozen test molecules), and the published R, Q and interaction parameters are
+  generated into the repository from `thermo` by `packages/chem-core/scripts/generate_unifac.py`
+  (nothing typed from memory). When a molecule cannot be fragmented, or a group pair has no
+  published parameter, the tools fall back to the ideal solution and say why.
+  *Distillation*: modified-Raoult T–x–y diagram (p = Σ xᵢγᵢpᵢ°) on the two Lee–Kesler vapour
+  curves, boiling-point gap, relative volatility at both ends of the composition range, Fenske
+  minimum stages, a verdict (easy / normal / hard / impractical / azeotropic), the **predicted
+  azeotrope** (composition, temperature, minimum- or maximum-boiling; ethanol–water comes out at
+  x ≈ 0.9 and ≈ 78 °C against the measured 78.2 °C), and the literature azeotrope for comparison
+  when the drawn molecule and the solvent are a tabulated pair. *Cooling crystallisation*:
+  Schröder–van Laar solubility with the UNIFAC activity coefficient of the solute in the saturated
+  solution (ideal when unavailable), solubility in g per 100 g solvent at the hot and cold
+  temperatures, recovery fraction, solvent needed per gram, the solubility curve, and γ itself,
+  which tells you whether the solvent is a crystallisation solvent or an anti-solvent (naphthalene
+  in water: γ ≈ 10⁵). The solvent's constants are estimated by the same
   methods on its own structure and anchored at its measured boiling point and Hansen parameters
   (water uses measured constants). A *Measured values* box lets you replace the estimated Tb, Tm
   and ΔHfus of the drawn molecule with data-sheet values; everything downstream uses them.

@@ -9,6 +9,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+# Only for scripts/generate_unifac.py (regenerates the UNIFAC tables and fixtures).
+scripts = ["thermo>=0.6"]
 
 [build-system]
 requires = ["hatchling"]

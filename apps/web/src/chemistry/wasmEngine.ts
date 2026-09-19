@@ -5,6 +5,8 @@
  */
 import { cleanupGeometry, molecularWeight, parseMolfile, writeMolfile } from "@molecular-cad/molecule-model";
 import type { Molecule } from "@molecular-cad/molecule-model";
+import { fragmentUnifac } from "./unifacFragment";
+import type { UnifacAssignment } from "./unifacFragment";
 import type { ChemistryEngine, ComputedProperties, DepictOptions, Descriptor, EngineIssue, EngineValidation, FromSmilesOptions, FromSmilesResult, OptimizedGeometry, Prediction, StereoInfo } from "./engine";
 import { EngineError } from "./engine";
 
@@ -15,6 +17,8 @@ export interface RDKitMol {
   get_inchi(): string;
   get_descriptors(): string;
   get_molblock(details?: string): string;
+  /** JSON array of {atoms, bonds} index lists for a query molecule from get_qmol (unique matches). */
+  get_substruct_matches(query: RDKitMol, details?: string): string;
   get_stereo_tags(): string;
   get_num_atoms(): number;
   add_hs_in_place(): boolean;
@@ -31,6 +35,8 @@ export interface RDKitLog {
 export interface RDKitModule {
   version(): string;
   get_mol(input: string, details?: string): RDKitMol | null;
+  /** Query molecule from SMARTS. */
+  get_qmol(input: string): RDKitMol | null;
   get_inchikey_for_inchi(inchi: string): string;
   set_log_capture?(name: string): RDKitLog | null;
   enable_logging?(): void;
@@ -117,6 +123,12 @@ export class WasmRdkitEngine implements ChemistryEngine {
   async ready(): Promise<{ version: string }> {
     await this.module();
     return { version: this.version };
+  }
+
+  /** UNIFAC subgroup assignment by SMARTS matching (see unifacFragment.ts). */
+  async unifacGroups(mol: Molecule): Promise<UnifacAssignment> {
+    const RDKit = await this.module();
+    return fragmentUnifac(RDKit, mol);
   }
 
   private takeLog(): string {

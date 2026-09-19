@@ -1,16 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { CHEM21_ORDER, SOLVENTS, assessCrystallisation, assessDistillation, knownAzeotrope, solubilityCurve } from "@molecular-cad/molecule-model";
-import type { PureComponent } from "@molecular-cad/molecule-model";
+import type { Molecule, PureComponent, UnifacGroups } from "@molecular-cad/molecule-model";
 import type { ChemistryEngine } from "../chemistry/engine";
-import { solventComponent } from "../chemistry/components";
-import type { SolventComponent } from "../chemistry/components";
+import { solventComponent, targetUnifacGroups } from "../chemistry/components";
+import type { SolventComponent, UnifacFragmenter } from "../chemistry/components";
 import { XyChart } from "./XyChart";
 
 export interface MixtureSectionProps {
   engine: ChemistryEngine;
+  /** Always the WebAssembly engine: UNIFAC fragmentation runs locally whatever engine is selected. */
+  fragmenter: UnifacFragmenter;
+  molecule: Molecule;
   target: PureComponent | null;
-  /** Canonical SMILES of the drawn molecule, to recognise it in the azeotrope table. */
-  targetCanonical: string | null;
+  /** Solvent-table id when the drawn molecule is a tabulated solvent (for the literature azeotropes). */
+  targetId: string | null;
 }
 
 const r1 = (v: number) => (Math.round(v * 10) / 10).toFixed(1);
@@ -28,35 +31,34 @@ function Row({ label, value, id }: { label: string; value: React.ReactNode; id?:
 }
 
 /** Distillation and crystallisation of the drawn molecule with a tabulated solvent. */
-export function MixtureSection({ engine, target, targetCanonical }: MixtureSectionProps) {
+export function MixtureSection({ engine, fragmenter, molecule, target: targetIn, targetId }: MixtureSectionProps) {
   const [solventId, setSolventId] = useState("ethanol");
   const [solvent, setSolvent] = useState<SolventComponent | null | "loading">("loading");
   const [tHot, setTHot] = useState("60");
   const [tCold, setTCold] = useState("0");
+  const [targetGroups, setTargetGroups] = useState<UnifacGroups | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setSolvent("loading");
-    void solventComponent(engine, solventId).then((s) => !cancelled && setSolvent(s));
+    void solventComponent(engine, fragmenter, solventId).then((s) => !cancelled && setSolvent(s));
     return () => {
       cancelled = true;
     };
-  }, [engine, solventId]);
+  }, [engine, fragmenter, solventId]);
 
-  const sc = solvent === "loading" ? null : solvent;
-  // The drawn molecule may itself be one of the solvents (then the literature azeotrope applies).
-  const [targetId, setTargetId] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
-    if (!targetCanonical) return setTargetId(null);
-    Promise.all(SOLVENTS.map((s) => solventComponent(engine, s.id))).then((all) => {
-      if (cancelled) return;
-      setTargetId(all.find((s) => s && s.canonicalSmiles === targetCanonical)?.solvent.id ?? null);
-    });
+    setTargetGroups(null);
+    if (molecule.atoms.length === 0) return;
+    void targetUnifacGroups(fragmenter, molecule).then((g) => !cancelled && setTargetGroups(g));
     return () => {
       cancelled = true;
     };
-  }, [engine, targetCanonical]);
+  }, [fragmenter, molecule]);
+
+  const target = useMemo(() => (targetIn ? { ...targetIn, unifac: targetGroups } : null), [targetIn, targetGroups]);
+  const sc = solvent === "loading" ? null : solvent;
 
   const distillation = useMemo(() => (target && sc ? assessDistillation(target, sc.component) : null), [target, sc]);
   const azeotrope = targetId && sc ? knownAzeotrope(targetId, sc.solvent.id) : null;
@@ -114,6 +116,8 @@ export function MixtureSection({ engine, target, targetCanonical }: MixtureSecti
           <Row label="Boiling-point gap" value={`${r1(distillation.dTb)} K`} />
           <Row label="Relative volatility α" value={distillation.alphaMeaningful ? `${distillation.alphaMean.toFixed(2)} (${distillation.alphaLow.toFixed(2)}–${distillation.alphaHigh.toFixed(2)})` : "≫ 100 (not a fractionation)"} />
           <Row label="Separation" value={<span id="dist-verdict">{distillation.verdict}</span>} />
+          <Row label="Activity model" value={<span id="dist-model">{distillation.activityModel.kind === "UNIFAC" ? "UNIFAC" : `ideal (${distillation.activityModel.reason})`}</span>} />
+          {distillation.azeotrope && <Row label="Predicted azeotrope" value={<span id="azeotrope-predicted">{`x(${distillation.light.name}) = ${distillation.azeotrope.x1.toFixed(2)}, ${r1(C(distillation.azeotrope.T))} °C, ${distillation.azeotrope.kind}`}</span>} />}
           {distillation.alphaMeaningful && <Row label="Min. stages (99 %/1 %)" value={distillation.nmin === null ? "—" : `${Math.ceil(distillation.nmin)} (Fenske, total reflux)`} />}
           {distillation.txy.length > 0 && (
             <XyChart
@@ -133,19 +137,20 @@ export function MixtureSection({ engine, target, targetCanonical }: MixtureSecti
           )}
           {azeotrope ? (
             <p className="hint warn-text" id="azeotrope">
-              Literature: {distillation.light.name} and {distillation.heavy.name} form a {azeotrope.kind} azeotrope at {azeotrope.t} °C (about {azeotrope.wtA} wt % {SOLVENTS.find((s) => s.id === azeotrope.a)?.name}). The ideal diagram above does not show it; simple distillation cannot pass the azeotropic composition.
+              Literature: {distillation.light.name} and {distillation.heavy.name} form a {azeotrope.kind} azeotrope at {azeotrope.t} °C (about {azeotrope.wtA} wt % {SOLVENTS.find((s) => s.id === azeotrope.a)?.name}).{" "}
+              {distillation.azeotrope ? `The UNIFAC prediction above (${r1(C(distillation.azeotrope.T))} °C) can be compared with this measured value.` : distillation.activityModel.kind === "UNIFAC" ? "UNIFAC does not reproduce it here; trust the measurement." : "The ideal diagram above does not show it; simple distillation cannot pass the azeotropic composition."}
             </p>
-          ) : (
+          ) : distillation.activityModel.kind === "ideal" ? (
             <p className={`hint${distillation.nonIdeality.level === "strong" ? " warn-text" : ""}`} id="nonideality">
               {distillation.nonIdeality.text}
             </p>
-          )}
+          ) : null}
           <ul className="reasoning">
             {distillation.notes.map((n, i) => (
               <li key={i}>{n}</li>
             ))}
           </ul>
-          <p className="hint">Raoult's law on Lee–Kesler vapour pressures; no activity coefficients (UNIFAC is not implemented). Known azeotropes are literature values for the tabulated solvents only.</p>
+          <p className="hint">{distillation.activityModel.kind === "UNIFAC" ? `Modified Raoult's law with original-UNIFAC activity coefficients (groups: ${distillation.activityModel.groups[0]} / ${distillation.activityModel.groups[1]}) on Lee–Kesler vapour pressures; typical error a few percent in composition, more for water-rich or associating systems.` : "Raoult's law on Lee–Kesler vapour pressures without activity coefficients."} Known azeotropes are literature values for the tabulated solvents only.</p>
         </section>
       )}
 
@@ -172,6 +177,7 @@ export function MixtureSection({ engine, target, targetCanonical }: MixtureSecti
                   <Row label={`Solubility at ${tHot} °C`} value={Number.isFinite(crystal.sHot) ? `${r1(crystal.sHot)} g / 100 g solvent` : "miscible (above Tm)"} id="cryst-hot-s" />
                   <Row label={`Solubility at ${tCold} °C`} value={Number.isFinite(crystal.sCold) ? `${r1(crystal.sCold)} g / 100 g solvent` : "miscible"} />
                   <Row label="Recovery on cooling" value={<span id="cryst-recovery">{`${(crystal.recovery * 100).toFixed(0)} %`}</span>} />
+                  <Row label="Activity model" value={<span id="cryst-model">{crystal.activityModel.kind === "UNIFAC" ? `UNIFAC (γ = ${crystal.gammaHot >= 100 ? crystal.gammaHot.toExponential(1) : crystal.gammaHot.toFixed(2)} at ${tHot} °C)` : `ideal (${crystal.activityModel.reason})`}</span>} />
                   <Row label="Solvent per gram" value={crystal.solventPerGram > 0 ? `${r1(crystal.solventPerGram)} g` : "—"} />
                   {curve.length > 1 && (
                     <XyChart
@@ -197,7 +203,7 @@ export function MixtureSection({ engine, target, targetCanonical }: MixtureSecti
                   </ul>
                 </>
               )}
-              <p className="hint">Schröder–van Laar ideal solubility (no ΔCp term, activity coefficient 1): an upper bound for most solute–solvent pairs. Tm and ΔHfus from Joback unless you entered measured values; Joback's Tm is its least reliable property and enters exponentially here.</p>
+              <p className="hint">Schröder–van Laar solubility (no ΔCp term) with the UNIFAC activity coefficient of the solute when both components have groups, ideal (γ = 1, an upper bound) otherwise. Tm and ΔHfus from Joback unless you entered measured values; Joback's Tm is its least reliable property and enters exponentially here.</p>
             </>
           )}
         </section>
