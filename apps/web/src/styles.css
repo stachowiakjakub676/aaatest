@@ -1502,3 +1502,120 @@ kbd {
   flex: 1 1 0;
   min-width: 0;
 }
+
+/* ---------------------------------------------------------------------------
+   Design workspace (stage 3): specification builder + requirement sheet + live check
+   --------------------------------------------------------------------------- */
+.view-switch {
+  flex: 0 0 auto;
+}
+.view-switch .seg-item {
+  padding: 4px 12px;
+}
+.design-view {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: grid;
+  grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
+  gap: 1px;
+  background: var(--border);
+  min-height: 0;
+}
+.spec-builder,
+.design-main {
+  background: var(--panel);
+  overflow-y: auto;
+  min-height: 0;
+}
+.design-main {
+  background: var(--viewport-bg);
+}
+.design-main .panel-section {
+  background: var(--panel);
+  margin: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.design-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+.constraint-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.constraint-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  background: var(--panel-2);
+}
+.constraint-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.constraint-main .select.prop {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.constraint-main .select.op {
+  flex: 0 0 auto;
+}
+.constraint-main .bound {
+  flex: 0 1 72px;
+  min-width: 56px;
+}
+.constraint-main .unit {
+  font-size: 11px;
+}
+.constraint-main .weight {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.constraint-main .weight input {
+  width: 90px;
+}
+.provenance {
+  margin-top: 4px;
+}
+.chip-on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  margin: 6px 0;
+}
+textarea.input {
+  font: inherit;
+  resize: vertical;
+}
+.check-table tr.check-pass td:last-child {
+  color: var(--ok);
+}
+.check-table tr.check-fail td:last-child {
+  color: var(--err);
+}
+.check-table tr.check-unknown td:last-child {
+  color: var(--warn);
+}
+@media (max-width: 900px) {
+  .design-view {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    overflow-y: auto;
+  }
+}

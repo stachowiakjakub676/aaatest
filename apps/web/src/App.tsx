@@ -32,6 +32,8 @@ import { AssistantPanel } from "./ui/AssistantPanel";
 import type { ExplainerChoice, QaEntry } from "./ui/AssistantPanel";
 import { RetroPanel } from "./ui/RetroPanel";
 import { PhasePanel } from "./ui/PhasePanel";
+import { DesignView } from "./ui/design/DesignView";
+import { useSpecification } from "./design/useSpecification";
 import { MaterialsPanel } from "./ui/MaterialsPanel";
 import { RULE_ANALYSIS } from "./ai/analysis";
 import { applySuggestion } from "./ai/suggestions";
@@ -112,6 +114,8 @@ export function App() {
   const [autoTidy, setAutoTidy] = useState(() => readSetting("mcad.autoTidy", "1") !== "0");
   const [dialog, setDialog] = useState<DialogMode | "help" | null>(null);
   const [tab, setTab] = useState<RightTab>("inspect");
+  const [view, setView] = useState<"editor" | "design">("editor");
+  const specification = useSpecification();
   // Phase 7: assistant state. Phase 8: retrosynthesis state.
   const [explainer, setExplainer] = useState<ExplainerChoice>("template");
   const [explanation, setExplanation] = useState<Explanation | null>(null);
@@ -553,6 +557,14 @@ export function App() {
           <span className="brand-name">Clapeyron</span>
           <span className="brand-phase">molecular design · prototype</span>
         </div>
+        <div className="seg view-switch" role="tablist" aria-label="Workspace">
+          <button type="button" role="tab" id="view-editor" aria-selected={view === "editor"} className={`seg-item ${view === "editor" ? "active" : ""}`} onClick={() => setView("editor")}>
+            Editor
+          </button>
+          <button type="button" role="tab" id="view-design" aria-selected={view === "design"} className={`seg-item ${view === "design" ? "active" : ""}`} onClick={() => setView("design")}>
+            Design
+          </button>
+        </div>
         <div className="header-actions">
           <button type="button" className="btn btn-small" onClick={() => setDialog("import")} title="Import MCAD JSON, MOL, SDF or SMILES (Ctrl+O)">
             Import
@@ -574,6 +586,8 @@ export function App() {
         </div>
       </header>
 
+      {view === "design" && <DesignView api={specification} molecule={molecule} chemistry={chemistry.state} onOpenEditor={() => setView("editor")} />}
+      {view === "editor" && (
       <Toolbox
         mode={mode}
         onMode={changeMode}
@@ -628,7 +642,9 @@ export function App() {
         onAttachSmiles={attachSmiles}
         smilesReady={chemistry.state.status === "ready" && engine.capabilities.smiles}
       />
+      )}
 
+      {view === "editor" && (
       <main className="viewport-area">
         <div className="doc-tabs" role="tablist" aria-label="Open molecules">
           {docs.map((d) => {
@@ -683,7 +699,9 @@ export function App() {
           drag · rotate &nbsp;|&nbsp; wheel / pinch · zoom &nbsp;|&nbsp; right-drag / two-finger drag · pan
         </div>
       </main>
+      )}
 
+      {view === "editor" && (
       <aside className="panel inspector" aria-label="Inspector">
         <nav className="tabs" role="tablist">
           {TABS.map(([id, label]) => (
@@ -791,6 +809,7 @@ export function App() {
           />
         )}
       </aside>
+      )}
 
       <StatusBar validation={validation} selection={selection} mode={mode} element={element} pendingAtomId={pendingAtomId} lastAction={history.lastLabel} notice={notice} />
 

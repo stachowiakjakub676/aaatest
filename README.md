@@ -223,6 +223,34 @@ them against a solvent table with greenness classes.
   carry the same numbers (vapour pressure at 25 °C, boiling point at 20 mbar, ΔHvap at 25 °C,
   Hansen parameters with the closest solvents).
 
+## Design engine (stage 3, phase 3A)
+
+The **Design** switch in the header opens the design workspace: the program is moving from
+"what are the properties of this molecule?" to "I need a molecule that satisfies these
+requirements". Phase 3A delivers the data model and the specification builder; candidate
+generation, filtering, ranking and comparison follow in phases 3B–3F on the same model.
+
+- **`packages/design-engine`** is a separate package with a small API. Its *property catalogue*
+  lists every quantity a specification may constrain, with the provenance class the current tools
+  supply (computed / predicted / estimated / experimental / database), the method and its typical
+  error. A *specification* has hard constraints (range, bound or category on a catalogue
+  property), soft preferences (higher / lower / close to a target, with a weight, stored now and
+  used for ranking in phase 3D), and structural constraints (allowed elements, heavy-atom range,
+  neutrality, required and forbidden SMARTS). `validateSpecification` reports incomplete or
+  contradictory requirements; `evaluateSpecification` checks a candidate *profile* (values with
+  provenance) and returns pass / fail / unknown per requirement with the reason, never a bare
+  score. Specification files (`kind: "clapeyron-specification"`) round-trip through
+  `serializeSpecification` / `parseSpecification`.
+- **Builder.** Property pickers grouped by domain show the method and error next to every
+  requirement; live validation; element chips, heavy-atom range, neutrality, SMARTS lists (checked
+  by RDKit from phase 3B); autosave in the browser; import/export as JSON.
+- **Requirement sheet and live check.** The right pane renders the specification in words and
+  checks the molecule open in the editor against it, using the same descriptors and predictions
+  the Chemistry tab shows (`design/profile.ts` maps them onto the catalogue): each row carries
+  the actual value with its provenance tag, the verdict and, on hover, the reason including the
+  model error. A molecule passes only when every requirement passes; missing values leave it
+  undecided rather than failing it.
+
 ## Principles
 
 - The molecular graph (`packages/molecule-model`) is the source of truth; the renderer is derived from it.

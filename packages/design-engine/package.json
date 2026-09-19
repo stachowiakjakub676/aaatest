@@ -1,0 +1,24 @@
+{
+  "name": "@molecular-cad/design-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Design engine: requirement specifications, property catalogue with provenance, candidate evaluation (stage 3)",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@molecular-cad/molecule-model": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.0"
+  }
+}
