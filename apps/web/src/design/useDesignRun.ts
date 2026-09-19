@@ -54,6 +54,7 @@ export function useDesignRun(engine: WasmRdkitEngine, appVersion: string): Desig
       setRunning(true);
       setError(null);
       setProgress({ stage: "generating", done: 0, total: 0 });
+      let stage: "Loading the chemistry engine" | "Generation" | "Validation" | "Evaluation" = "Loading the chemistry engine";
       try {
         const { version } = await engine.ready();
         const input: GenerationInput = {
@@ -74,18 +75,22 @@ export function useDesignRun(engine: WasmRdkitEngine, appVersion: string): Desig
           },
         };
         const merged = { ...generator.defaults, ...params, limit };
+        stage = "Generation";
         const candidates = await generator.generate(input, merged, (done, total) => mine === token.current && setProgress({ stage: "generating", done, total }));
         if (mine !== token.current) return;
+        stage = "Validation";
         setProgress({ stage: "validating", done: 0, total: candidates.length });
         const fresh = createRun(spec, generator, merged, seed, { app: `Clapeyron ${appVersion}`, engine: `${engine.id} ${version}`, models: [] }, repeatOf);
         const validated = await validateCandidates(fresh, candidates, structureTools(engine), (d, t) => mine === token.current && setProgress({ stage: "validating", done: d, total: t }));
         if (mine !== token.current) return;
+        stage = "Evaluation";
         setProgress({ stage: "evaluating", done: 0, total: validated.summary.valid });
         const evaluated = await evaluateRun(validated, candidateEvaluator(engine), cache.current, {}, (d, t) => mine === token.current && setProgress({ stage: "evaluating", done: d, total: t }));
         if (mine !== token.current) return;
         publish(evaluated);
       } catch (e) {
-        if (mine === token.current) setError(e instanceof Error ? e.message : String(e));
+        // Name the stage: "undefined is not an object" alone says nothing about where it happened.
+        if (mine === token.current) setError(`${stage} failed: ${e instanceof Error ? e.message : String(e)}`);
       } finally {
         if (mine === token.current) {
           setRunning(false);
@@ -102,10 +107,21 @@ export function useDesignRun(engine: WasmRdkitEngine, appVersion: string): Desig
 
   const importText = useCallback(
     (text: string) => {
-      const parsed = parseRun(text);
+      let parsed;
+      try {
+        parsed = parseRun(text);
+      } catch (e) {
+        return `Could not read the run file: ${e instanceof Error ? e.message : String(e)}`;
+      }
       if (!parsed) return "Not a Clapeyron design-run file.";
       const asEvaluated = parsed as EvaluatedRun;
-      publish({ ...asEvaluated, evaluation: asEvaluated.evaluation ?? { evaluated: 0, passed: 0, borderline: 0, failed: 0, undecided: 0, cacheHits: 0 }, evaluationOptions: asEvaluated.evaluationOptions ?? { margins: true }, history: [...(asEvaluated.history ?? []), `${new Date().toISOString()}: imported from file`] });
+      const counted = asEvaluated.records.filter((r) => r.evaluation);
+      publish({
+        ...asEvaluated,
+        evaluation: asEvaluated.evaluation ?? { evaluated: counted.length, passed: counted.filter((r) => r.evaluation?.overall === "pass").length, borderline: counted.filter((r) => r.evaluation?.overall === "borderline").length, failed: counted.filter((r) => r.evaluation?.overall === "fail").length, undecided: counted.filter((r) => r.evaluation?.overall === "unknown").length, cacheHits: 0 },
+        evaluationOptions: asEvaluated.evaluationOptions ?? { margins: true },
+        history: [...(asEvaluated.history ?? []), `${new Date().toISOString()}: imported from file`],
+      });
       return null;
     },
     [publish],
@@ -120,7 +136,7 @@ export function useDesignRun(engine: WasmRdkitEngine, appVersion: string): Desig
         const next = await appendCandidates(run, [manualCandidate(molecule, parent, note)], structureTools(engine), candidateEvaluator(engine), cache.current);
         replace(next);
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+        setError(`Adding the molecule to the run failed: ${e instanceof Error ? e.message : String(e)}`);
       } finally {
         setRunning(false);
       }
@@ -130,7 +146,12 @@ export function useDesignRun(engine: WasmRdkitEngine, appVersion: string): Desig
 
   const reevaluate = useCallback(
     (spec: Specification) => {
-      if (run) replace(reevaluateRun(run, spec));
+      if (!run) return;
+      try {
+        replace(reevaluateRun(run, spec));
+      } catch (e) {
+        setError(`Re-evaluation failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
     },
     [run, replace],
   );

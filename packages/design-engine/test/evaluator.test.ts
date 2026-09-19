@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { FRAGMENTS, getSampleMolecule, molecularFormula, molecularWeight } from "@molecular-cad/molecule-model";
 import type { Molecule } from "@molecular-cad/molecule-model";
-import { DERIVATIVE_GENERATOR, appendCandidates, createRun, createSpecification, evaluateRun, filterRecords, manualCandidate, reevaluateRun, specificationChanged, touch, validateCandidates, verdictReason } from "../src";
-import type { CandidateEvaluator, CandidateProfile, ProfileCache, Specification, StructureTools } from "../src";
+import { DERIVATIVE_GENERATOR, appendCandidates, createRun, createSpecification, evaluateRun, filterRecords, manualCandidate, parseRun, rankRecords, reevaluateRun, specificationChanged, touch, validateCandidates, verdictReason } from "../src";
+import type { CandidateEvaluator, CandidateProfile, EvaluatedRun, ProfileCache, Specification, StructureTools } from "../src";
 
 const ethanol = getSampleMolecule("ethanol")!;
 const tools: StructureTools = {
@@ -101,5 +101,34 @@ describe("iteration", () => {
     expect(re.records.find((r) => r.candidate.name === "my edit")!.evaluation!.overall).toBe("pass");
     expect(re.history[re.history.length - 1]).toMatch(/structural constraints changed/);
     expect(ev.calls).toBe(run.evaluation.evaluated + 1); // no profile recomputed
+  });
+});
+
+describe("robustness of run files", () => {
+  it("normalises a run that is missing fields instead of leaving holes the UI would read", () => {
+    const minimal = JSON.stringify({ kind: "clapeyron-design-run", version: 1, run: { id: "old-run", records: [{ candidate: { id: "c", name: "c", molecule: ethanol, origin: { generator: "g", strategy: "s", parent: null, operations: [] } }, status: "valid", canonicalSmiles: "CCO" }, null, { nonsense: true }] } });
+    const run = parseRun(minimal)!;
+    expect(run.records).toHaveLength(1); // malformed records dropped
+    expect(run.provenance).toEqual({ app: "unknown", engine: "unknown", models: [] });
+    expect(run.rejectionsByStage).toEqual({ structural: 0, graph: 0, engine: 0, duplicate: 0, substructure: 0 });
+    expect(run.summary).toEqual({ generated: 1, rejected: 0, valid: 1 });
+    expect(run.history).toEqual([]);
+    expect(run.seedMolecule).toBeNull();
+    expect(run.generator).toEqual({ id: "unknown", label: "unknown generator", params: {} });
+    expect(run.specification.hard).toEqual([]);
+    // The stages that read a run must survive it.
+    expect(() => rankRecords(run.records, run.specification)).not.toThrow();
+    const asEvaluated = run as EvaluatedRun;
+    expect(() => reevaluateRun(asEvaluated, run.specification)).not.toThrow();
+    expect(reevaluateRun(asEvaluated, run.specification).evaluation.cacheHits).toBe(0);
+  });
+
+  it("appends to a run that came from a file without provenance or history", async () => {
+    const bare = parseRun(JSON.stringify({ kind: "clapeyron-design-run", version: 1, run: { id: "bare", records: [] } }))! as EvaluatedRun;
+    const next = await appendCandidates(bare, [manualCandidate({ ...ethanol, name: "by hand" }, null, "drawn")], tools, fakeEvaluator(), new Map());
+    expect(next.records).toHaveLength(1);
+    expect(next.provenance.models).toContain("fake weight model");
+    expect(next.history[0]).toMatch(/added 1 candidate/);
+    expect(next.evaluation.evaluated).toBe(1);
   });
 });

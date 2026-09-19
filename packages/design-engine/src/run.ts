@@ -6,6 +6,7 @@
  */
 import { validateMolecule } from "@molecular-cad/molecule-model";
 import type { Molecule } from "@molecular-cad/molecule-model";
+import { createSpecification } from "./specification";
 import type { Candidate, GeneratorParams } from "./candidates";
 import { structuralRejection } from "./candidates";
 import type { CandidateProfile, EvaluationResult } from "./evaluation";
@@ -177,7 +178,31 @@ export function serializeRun(run: DesignRun, pretty = true): string {
   return JSON.stringify({ kind: DESIGN_RUN_KIND, version: 1, run }, null, pretty ? 2 : 0);
 }
 
-/** Parse a run file; null when the text is not one. Shape is trusted beyond the kind check (runs are the app's own output). */
+/**
+ * Fill in everything the UI reads, so a file from an older version (or another tool) cannot leave
+ * a hole that crashes a render. Records keep whatever they carry; only the run's own frame is
+ * normalised, and the counts are recomputed from the records.
+ */
+export function normaliseRun(run: Partial<DesignRun>): DesignRun {
+  const records = (Array.isArray(run.records) ? run.records : []).filter((r): r is CandidateRecord => !!r && typeof r === "object" && !!r.candidate && !!r.candidate.molecule);
+  return summariseRun({
+    id: typeof run.id === "string" ? run.id : newId("run"),
+    createdAt: typeof run.createdAt === "string" ? run.createdAt : new Date().toISOString(),
+    finishedAt: typeof run.finishedAt === "string" ? run.finishedAt : null,
+    specification: run.specification ?? createSpecification("imported specification"),
+    generator: { id: run.generator?.id ?? "unknown", label: run.generator?.label ?? "unknown generator", params: run.generator?.params ?? {} },
+    seed: run.seed ?? null,
+    seedMolecule: run.seedMolecule ?? null,
+    repeatOf: run.repeatOf ?? null,
+    provenance: { app: run.provenance?.app ?? "unknown", engine: run.provenance?.engine ?? "unknown", models: Array.isArray(run.provenance?.models) ? run.provenance.models : [] },
+    records,
+    summary: { generated: 0, rejected: 0, valid: 0 },
+    rejectionsByStage: { structural: 0, graph: 0, engine: 0, duplicate: 0, substructure: 0 },
+    history: Array.isArray(run.history) ? run.history.filter((h): h is string => typeof h === "string") : [],
+  });
+}
+
+/** Parse a run file; null when the text is not one. Missing fields are filled in by `normaliseRun`. */
 export function parseRun(text: string): DesignRun | null {
   let raw: unknown;
   try {
@@ -186,7 +211,7 @@ export function parseRun(text: string): DesignRun | null {
     return null;
   }
   if (!raw || typeof raw !== "object" || (raw as { kind?: unknown }).kind !== DESIGN_RUN_KIND) return null;
-  const run = (raw as { run?: unknown }).run as DesignRun | undefined;
-  if (!run || typeof run !== "object" || !Array.isArray(run.records)) return null;
-  return { ...run, seedMolecule: run.seedMolecule ?? null, repeatOf: run.repeatOf ?? null, history: Array.isArray(run.history) ? run.history : [] };
+  const run = (raw as { run?: unknown }).run;
+  if (!run || typeof run !== "object" || !Array.isArray((run as DesignRun).records)) return null;
+  return normaliseRun(run as Partial<DesignRun>);
 }

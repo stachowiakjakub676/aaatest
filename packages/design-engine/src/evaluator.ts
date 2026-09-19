@@ -72,11 +72,11 @@ export async function evaluateRun(run: DesignRun, evaluator: CandidateEvaluator,
     onProgress?.(done, valid.length);
   }
   const count = (s: CheckStatus) => records.filter((r) => r.evaluation?.overall === s).length;
-  const models = [...new Set([...run.provenance.models, ...evaluator.models])];
+  const models = [...new Set([...(run.provenance?.models ?? []), ...evaluator.models])];
   return {
     ...run,
     records,
-    provenance: { ...run.provenance, models },
+    provenance: { ...run.provenance, app: run.provenance?.app ?? "unknown", engine: run.provenance?.engine ?? "unknown", models },
     finishedAt: new Date().toISOString(),
     evaluationOptions: { margins: opts.margins ?? true, substructuresVerified: true },
     evaluation: { evaluated: valid.length, passed: count("pass"), borderline: count("borderline"), failed: count("fail"), undecided: count("unknown"), cacheHits },
@@ -124,11 +124,12 @@ function summariseEvaluation(records: CandidateRecord[], cacheHits: number): Eva
 export async function appendCandidates(run: EvaluatedRun, candidates: Candidate[], tools: StructureTools, evaluator: CandidateEvaluator, cache: ProfileCache): Promise<EvaluatedRun> {
   const seen = new Map<string, string>();
   for (const r of run.records) if (r.canonicalSmiles && r.status === "valid") seen.set(r.canonicalSmiles, r.candidate.name);
+  if (candidates.length === 0) return run;
   const validated = await validateCandidates({ ...run, records: [] }, candidates, tools, undefined, seen);
-  const evaluated = await evaluateRun(validated, evaluator, cache, run.evaluationOptions);
+  const evaluated = await evaluateRun(validated, evaluator, cache, run.evaluationOptions ?? {});
   const records = [...run.records, ...evaluated.records];
-  const merged = summariseRun({ ...run, records, provenance: evaluated.provenance, history: [...run.history, `${new Date().toISOString()}: added ${candidates.length} candidate(s) by hand (${evaluated.records.filter((r) => r.status === "valid").length} valid)`] });
-  return { ...merged, evaluation: summariseEvaluation(records, run.evaluation.cacheHits + evaluated.evaluation.cacheHits) };
+  const merged = summariseRun({ ...run, records, provenance: evaluated.provenance, history: [...(run.history ?? []), `${new Date().toISOString()}: added ${candidates.length} candidate(s) by hand (${evaluated.records.filter((r) => r.status === "valid").length} valid)`] });
+  return { ...merged, evaluation: summariseEvaluation(records, (run.evaluation?.cacheHits ?? 0) + evaluated.evaluation.cacheHits) };
 }
 
 /**
@@ -138,11 +139,11 @@ export async function appendCandidates(run: EvaluatedRun, candidates: Candidate[
  * the honest answer.
  */
 export function reevaluateRun(run: EvaluatedRun, spec: Specification, options: EvaluationOptions = {}): EvaluatedRun {
-  const opts: EvaluationOptions = { ...run.evaluationOptions, ...options, substructuresVerified: true };
+  const opts: EvaluationOptions = { ...(run.evaluationOptions ?? {}), ...options, substructuresVerified: true };
   const structuralChanged = JSON.stringify(run.specification.structural) !== JSON.stringify(spec.structural);
   const records = run.records.map((r) => (r.status === "valid" && r.profile ? { ...r, evaluation: evaluateSpecification(spec, r.profile, r.candidate.molecule, opts) } : r));
   const note = `${new Date().toISOString()}: re-evaluated against the specification updated at ${spec.updatedAt}${structuralChanged ? " (structural constraints changed: candidates were generated and validated under the previous ones; run again to apply them)" : ""}`;
-  return { ...run, specification: JSON.parse(JSON.stringify(spec)) as Specification, records, history: [...run.history, note], evaluationOptions: opts, evaluation: summariseEvaluation(records, run.evaluation.cacheHits) };
+  return { ...run, specification: JSON.parse(JSON.stringify(spec)) as Specification, records, history: [...(run.history ?? []), note], evaluationOptions: opts, evaluation: summariseEvaluation(records, run.evaluation?.cacheHits ?? 0) };
 }
 
 /** True when the specification changed after the run's snapshot was taken. */

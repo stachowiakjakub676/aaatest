@@ -153,7 +153,7 @@ export function CandidatesPanel({ api, spec, issues, seed, engine, onOpenCandida
                     {r.seed ? ` · ${r.seed.name}` : ""}
                   </td>
                   <td className="mono">
-                    {r.evaluation.passed} / {r.summary.valid} / {r.summary.generated}
+                    {r.evaluation?.passed ?? 0} / {r.summary.valid} / {r.summary.generated}
                   </td>
                   <td>
                     <button type="button" className="btn btn-small" onClick={() => api.select(r.id)} disabled={r.id === run?.id}>
@@ -198,17 +198,17 @@ export function CandidatesPanel({ api, spec, issues, seed, engine, onOpenCandida
           <div className="row">
             <span className="row-label">Run {run.id}</span>
             <span className="row-value" id="run-summary">
-              <span className="status-chip ok">{run.evaluation.passed} pass</span> <span className="status-chip warn">{run.evaluation.borderline} borderline</span> <span className="status-chip err">{run.evaluation.failed} fail</span> <span className="status-chip warn">{run.evaluation.undecided} undecided</span> <span className="muted">· {run.summary.valid} valid of {run.summary.generated} generated, {run.summary.rejected} rejected</span>
+              <span className="status-chip ok">{run.evaluation?.passed ?? 0} pass</span> <span className="status-chip warn">{run.evaluation?.borderline ?? 0} borderline</span> <span className="status-chip err">{run.evaluation?.failed ?? 0} fail</span> <span className="status-chip warn">{run.evaluation?.undecided ?? 0} undecided</span> <span className="muted">· {run.summary.valid} valid of {run.summary.generated} generated, {run.summary.rejected} rejected</span>
             </span>
           </div>
           <p className="hint">
             {run.generator.label}
-            {run.seed ? ` on ${run.seed.name} (${run.seed.atoms} atoms)` : ""} · {run.provenance.engine} · {run.createdAt.replace("T", " ").slice(0, 19)} · rejections: {Object.entries(run.rejectionsByStage).filter(([, n]) => n > 0).map(([s, n]) => `${s} ${n}`).join(", ") || "none"} · profiles from cache: {run.evaluation.cacheHits}
+            {run.seed ? ` on ${run.seed.name} (${run.seed.atoms} atoms)` : ""} · {run.provenance?.engine ?? "unknown engine"} · {run.createdAt.replace("T", " ").slice(0, 19)} · rejections: {Object.entries(run.rejectionsByStage ?? {}).filter(([, n]) => n > 0).map(([s, n]) => `${s} ${n}`).join(", ") || "none"} · profiles from cache: {run.evaluation?.cacheHits ?? 0}
           </p>
-          <p className="hint" id="run-models">Models: {run.provenance.models.join("; ")}</p>
-          {run.history.length > 0 && (
+          <p className="hint" id="run-models">Models: {(run.provenance?.models ?? []).join("; ") || "none recorded"}</p>
+          {(run.history ?? []).length > 0 && (
             <ul className="reasoning small" id="run-history-notes">
-              {run.history.map((h, i) => (
+              {(run.history ?? []).map((h, i) => (
                 <li key={i}>{h}</li>
               ))}
             </ul>
