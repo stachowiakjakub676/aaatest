@@ -2,23 +2,25 @@
 import { useCallback, useRef, useState } from "react";
 import { FRAGMENTS, SOLVENTS } from "@molecular-cad/molecule-model";
 import type { Molecule } from "@molecular-cad/molecule-model";
-import { createRun, generatorById, validateCandidates } from "@molecular-cad/design-engine";
-import type { DesignRun, GenerationInput, GeneratorParams, Specification } from "@molecular-cad/design-engine";
+import { createRun, evaluateRun, generatorById, validateCandidates } from "@molecular-cad/design-engine";
+import type { EvaluatedRun, GenerationInput, GeneratorParams, ProfileCache, Specification } from "@molecular-cad/design-engine";
+import { candidateEvaluator } from "./candidateEvaluator";
 import { BUILDING_BLOCKS } from "../retro/buildingBlocks";
 import type { WasmRdkitEngine } from "../chemistry/wasmEngine";
 import { structureTools } from "./structureTools";
 
 export interface DesignRunApi {
-  run: DesignRun | null;
+  run: EvaluatedRun | null;
   running: boolean;
-  progress: { stage: "generating" | "validating"; done: number; total: number } | null;
+  progress: { stage: "generating" | "validating" | "evaluating"; done: number; total: number } | null;
   error: string | null;
   start(spec: Specification, seed: Molecule | null, generatorId: string, params: GeneratorParams, limit: number): Promise<void>;
   clear(): void;
 }
 
 export function useDesignRun(engine: WasmRdkitEngine, appVersion: string): DesignRunApi {
-  const [run, setRun] = useState<DesignRun | null>(null);
+  const [run, setRun] = useState<EvaluatedRun | null>(null);
+  const cache = useRef<ProfileCache>(new Map());
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<DesignRunApi["progress"]>(null);
   const [error, setError] = useState<string | null>(null);
@@ -56,9 +58,12 @@ export function useDesignRun(engine: WasmRdkitEngine, appVersion: string): Desig
         if (mine !== token.current) return;
         setProgress({ stage: "validating", done: 0, total: candidates.length });
         const fresh = createRun(spec, generator, merged, seed, { app: `Clapeyron ${appVersion}`, engine: `${engine.id} ${version}`, models: [] });
-        const done = await validateCandidates(fresh, candidates, structureTools(engine), (d, t) => mine === token.current && setProgress({ stage: "validating", done: d, total: t }));
+        const validated = await validateCandidates(fresh, candidates, structureTools(engine), (d, t) => mine === token.current && setProgress({ stage: "validating", done: d, total: t }));
         if (mine !== token.current) return;
-        setRun(done);
+        setProgress({ stage: "evaluating", done: 0, total: validated.summary.valid });
+        const evaluated = await evaluateRun(validated, candidateEvaluator(engine), cache.current, {}, (d, t) => mine === token.current && setProgress({ stage: "evaluating", done: d, total: t }));
+        if (mine !== token.current) return;
+        setRun(evaluated);
       } catch (e) {
         if (mine === token.current) setError(e instanceof Error ? e.message : String(e));
       } finally {

@@ -254,7 +254,16 @@ generation, filtering, ranking and comparison follow in phases 3B–3F on the sa
   SMILES → required and forbidden SMARTS (matched by RDKit in the browser). Nothing invalid reaches
   later stages. A run stores the specification snapshot, generator and parameters, seed, engine
   version and timestamps and exports as `kind: "clapeyron-design-run"`; any candidate opens in a
-  new editor tab. Property evaluation and filtering follow in phase 3C.
+  new editor tab.
+- **Evaluation and filtering (phase 3C).** Every valid candidate is profiled with the same
+  descriptors and models as the Chemistry tab (RDKit descriptors, Joback, Lee–Kesler, Girolami,
+  ESOL, Hansen, class pKa; QED/SA when the server engine is selected), once per canonical
+  structure (a session cache), and checked against the hard constraints: the table shows the
+  verdict (pass / borderline / fail / undecided), the first reason for anything but a clean pass,
+  one column per property the specification mentions (each value tagged computed or predicted,
+  method and error on hover) and an expandable list of every requirement with its reason. Filters:
+  all, passing, passing or borderline, failing, undecided, rejected. The run records the models
+  used and the cache hits; the order is still the generation order (ranking is phase 3D).
 - **Margins.** Predicted properties carry a typical error (13 K for the Joback boiling point,
   1 log unit for ESOL, …). A miss smaller than that error is reported as *borderline*, not as a
   fail, so a candidate is never rejected on a difference the model cannot resolve; the builder

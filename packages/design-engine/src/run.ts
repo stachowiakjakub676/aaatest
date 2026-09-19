@@ -21,9 +21,11 @@ export interface CandidateRecord {
   status: CandidateStatus;
   rejection?: { stage: RejectionStage; reason: string };
   canonicalSmiles?: string;
-  /** Filled by phase 3C. */
+  /** Filled by the evaluation stage (phase 3C). */
   profile?: CandidateProfile;
   evaluation?: EvaluationResult;
+  /** Set when the evaluator threw for this candidate (its profile is then empty). */
+  evaluationError?: string;
 }
 
 export interface RunProvenance {

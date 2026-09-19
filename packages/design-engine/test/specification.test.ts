@@ -75,6 +75,7 @@ describe("evaluation", () => {
     const ethanol = getSampleMolecule("ethanol")!;
     const r = checkStructural({ allowedElements: ["C", "O"], minHeavyAtoms: 2, maxHeavyAtoms: 5, neutral: true, requiredSubstructures: ["[OX2H]"], forbiddenSubstructures: [] }, ethanol);
     expect(r.map((x) => x.status)).toEqual(["pass", "pass", "pass", "unknown"]);
+    expect(checkStructural({ allowedElements: [], minHeavyAtoms: null, maxHeavyAtoms: null, neutral: false, requiredSubstructures: ["[OX2H]"], forbiddenSubstructures: ["[N+]"] }, ethanol, { substructuresVerified: true }).map((x) => x.status)).toEqual(["pass", "pass"]);
     const cl = checkStructural({ allowedElements: ["C"], minHeavyAtoms: null, maxHeavyAtoms: 2, neutral: false, requiredSubstructures: [], forbiddenSubstructures: [] }, ethanol);
     expect(cl[0]!.status).toBe("fail");
     expect(cl[0]!.reason).toBe("contains O");

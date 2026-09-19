@@ -1630,3 +1630,34 @@ textarea.input {
 .check-table tr.check-borderline td:last-child {
   color: var(--warn);
 }
+
+.link-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+}
+.link-btn.small {
+  font-size: 11px;
+}
+.candidate-table .verdict-reason {
+  max-width: 320px;
+}
+.checks-row td {
+  background: var(--panel-2);
+}
+.checks-row .reasoning li.check-pass .mono {
+  color: var(--ok);
+}
+.checks-row .reasoning li.check-fail .mono {
+  color: var(--err);
+}
+.checks-row .reasoning li.check-borderline .mono,
+.checks-row .reasoning li.check-unknown .mono {
+  color: var(--warn);
+}
+.candidate-table tr.check-pass > td:nth-child(3) .status {
+  font-weight: 600;
+}

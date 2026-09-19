@@ -42,7 +42,7 @@ test("design workspace: build a specification, validate it and check the open mo
   await expect(page.locator("#spec-preview tr.check-pass")).toHaveCount(3);
   await page.fill("#spec-required", "[OX2H]");
   await page.locator("#spec-required").blur();
-  await expect(page.locator("#spec-preview")).toContainText("phase 3B");
+  await expect(page.locator("#spec-preview")).toContainText("runs on generated candidates");
   await expect(page.locator("#preview-overall")).toHaveText("✗ fail"); // the weight constraint still fails
 
   // Soft preference with weight; persists across a reload.
@@ -79,28 +79,45 @@ test("design workspace: generate derivatives of the editor molecule, validate th
   await page.fill("#heavy-max", "5");
   await page.fill("#spec-required", "[OX2H]");
   await page.locator("#spec-required").blur();
+  // A hard constraint the derivatives split on: molecular weight ≤ 62 g/mol (propanols pass, butanols fail).
+  await page.click("#btn-add-constraint");
+  const mwRow = page.locator(".constraint-row").first();
+  await mwRow.locator("select.prop").selectOption("mw");
+  await mwRow.locator("select.op").selectOption("<=");
+  await mwRow.getByLabel("Upper bound").fill("62");
   await page.fill("#gen-limit", "40");
   await page.click("#btn-generate");
-  await expect(page.locator("#run-summary")).toContainText("valid", { timeout: 60_000 });
-  await expect(page.locator("#run-summary")).toContainText("of 40");
-  const rows = page.locator(".candidate-table tbody tr");
+  await expect(page.locator("#run-summary")).toContainText("valid of 40 generated", { timeout: 90_000 });
+  await expect(page.locator("#run-summary")).toContainText(/[1-9]\d* pass/);
+  await expect(page.locator("#run-summary")).toContainText(/[1-9]\d* fail/);
+  const rows = page.locator(".candidate-table tbody tr:not(.checks-row)");
   await expect(rows).toHaveCount(40);
-  await expect(page.locator(".candidate-table tr.cand-valid").first()).toBeVisible();
   await expect(page.locator(".candidate-table")).toContainText("attach Methyl (C) at C");
   await expect(page.locator(".candidate-table")).toContainText("lacks required substructure [OX2H]"); // methyl on the OH oxygen
   await expect(page.locator(".candidate-table")).toContainText("heavy atoms, more than 5");
+  await expect(page.locator(".candidate-table")).toContainText("is above 62 g/mol");
+  await expect(page.locator(".candidate-table th", { hasText: "Molecular weight (g/mol)" })).toBeVisible();
   await expect(page.locator("#candidates")).toContainText("rdkit-wasm");
-  await page.uncheck("#show-rejected");
-  expect(await rows.count()).toBeLessThan(40);
+  await expect(page.locator("#candidates")).toContainText("Joback");
+  await page.locator("#cand-filter").getByRole("radio", { name: "passing", exact: true }).click();
+  const passing = await rows.count();
+  expect(passing).toBeGreaterThan(0);
+  expect(passing).toBeLessThan(40);
+  await expect(page.locator(".candidate-table tr.check-fail")).toHaveCount(0);
+  // Expand the checks of the first passing candidate: every hard requirement listed with its reason.
+  await rows.first().locator(".link-btn").click();
+  await expect(page.locator(".checks-row")).toContainText("Molecular weight ≤ 62 g/mol");
+  await expect(page.locator(".checks-row")).toContainText("Must contain [OX2H]");
+  await page.locator("#cand-filter").getByRole("radio", { name: "all" }).click();
   // Open the first valid candidate: it becomes a new editor tab, the seed stays.
-  await page.locator(".candidate-table tr.cand-valid").first().getByRole("button", { name: "Open" }).click();
+  await page.locator(".candidate-table tr.check-pass").first().getByRole("button", { name: "Open" }).click();
   await expect(page.locator(".viewport-area")).toBeVisible();
   await expect(page.locator(".doc-tabs [role=tab]")).toHaveCount(2);
   await expect(page.locator(".doc-tabs [role=tab][aria-selected=true]")).toContainText("Ethanol + Methyl");
   // A borderline verdict: the seed's predicted boiling point misses a tight range by less than the model error.
   await page.click("#view-design");
   await page.click("#btn-add-constraint");
-  const row = page.locator(".constraint-row").first();
+  const row = page.locator(".constraint-row").nth(1);
   await row.getByLabel("Lower bound").fill("70");
   await row.getByLabel("Upper bound").fill("90");
   await expect(page.locator("#preview-overall")).toHaveText("△ borderline");

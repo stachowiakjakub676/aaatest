@@ -7,8 +7,13 @@
 import { girolamiDensity, hansenParameters, molecularWeight } from "@molecular-cad/molecule-model";
 import type { Molecule } from "@molecular-cad/molecule-model";
 import type { CandidateProfile, PropertyValue } from "@molecular-cad/design-engine";
-import type { ChemistryState } from "../chemistry/useChemistry";
-import type { Prediction } from "../chemistry/engine";
+import type { ComputedProperties, Prediction } from "../chemistry/engine";
+
+/** What the adapter needs: the engine's computed properties and the PREDICTED list (a subset of ChemistryState). */
+export interface ProfileSource {
+  properties: ComputedProperties | null;
+  predictions: Prediction[];
+}
 
 const DESCRIPTOR_KEYS = ["exactMass", "heavyAtomCount", "ringCount", "aromaticRingCount", "rotatableBonds", "hBondDonors", "hBondAcceptors", "tpsa", "cLogP", "fractionCsp3", "stereoCenters"] as const;
 
@@ -29,7 +34,7 @@ function fromPrediction(key: string, p: Prediction, value: number | string): Pro
   return { key, value, kind: "predicted", method: p.model, uncertainty: p.uncertainty ?? null };
 }
 
-export function profileFromChemistry(molecule: Molecule, state: ChemistryState): CandidateProfile {
+export function profileFromChemistry(molecule: Molecule, state: ProfileSource): CandidateProfile {
   const profile: CandidateProfile = {};
   const props = state.properties;
   if (props) {

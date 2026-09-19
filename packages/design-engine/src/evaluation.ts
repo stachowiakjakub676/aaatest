@@ -29,6 +29,8 @@ export type CheckStatus = "pass" | "fail" | "borderline" | "unknown";
 export interface EvaluationOptions {
   /** Soften fails that lie within the model error of the bound to "borderline" (default true). */
   margins?: boolean;
+  /** Substructure rules were already matched by the chemistry engine (validation stage): report them as passed. */
+  substructuresVerified?: boolean;
 }
 
 export interface ConstraintResult {
@@ -89,7 +91,7 @@ export function checkConstraint(c: HardConstraint, profile: CandidateProfile, op
 }
 
 /** Structural rules that follow from the graph alone; substructure patterns need the chemistry engine and stay unknown here. */
-export function checkStructural(st: StructuralConstraints, mol: Molecule): StructuralResult[] {
+export function checkStructural(st: StructuralConstraints, mol: Molecule, opts: EvaluationOptions = {}): StructuralResult[] {
   const out: StructuralResult[] = [];
   const heavy = mol.atoms.filter((a) => a.element !== "H");
   if (st.allowedElements.length) {
@@ -105,8 +107,9 @@ export function checkStructural(st: StructuralConstraints, mol: Molecule): Struc
     const q = totalFormalCharge(mol);
     out.push({ rule: "Neutral molecule", status: q === 0 ? "pass" : "fail", reason: `net charge ${q > 0 ? "+" : ""}${q}` });
   }
-  for (const s of st.requiredSubstructures) out.push({ rule: `Must contain ${s}`, status: "unknown", reason: "substructure matching needs the chemistry engine (phase 3B)" });
-  for (const s of st.forbiddenSubstructures) out.push({ rule: `Must not contain ${s}`, status: "unknown", reason: "substructure matching needs the chemistry engine (phase 3B)" });
+  const verified = opts.substructuresVerified === true;
+  for (const s of st.requiredSubstructures) out.push(verified ? { rule: `Must contain ${s}`, status: "pass", reason: "matched by the chemistry engine during validation" } : { rule: `Must contain ${s}`, status: "unknown", reason: "substructure matching runs on generated candidates (chemistry engine)" });
+  for (const s of st.forbiddenSubstructures) out.push(verified ? { rule: `Must not contain ${s}`, status: "pass", reason: "absent, checked by the chemistry engine during validation" } : { rule: `Must not contain ${s}`, status: "unknown", reason: "substructure matching runs on generated candidates (chemistry engine)" });
   // Disconnected fragments are never a valid single candidate.
   if (heavy.length > 1) {
     const seen = new Set<string>();
@@ -124,7 +127,7 @@ export function checkStructural(st: StructuralConstraints, mol: Molecule): Struc
 
 export function evaluateSpecification(spec: Specification, profile: CandidateProfile, mol: Molecule | null, opts: EvaluationOptions = {}): EvaluationResult {
   const constraints = spec.hard.map((c) => checkConstraint(c, profile, opts));
-  const structural = mol ? checkStructural(spec.structural, mol) : [];
+  const structural = mol ? checkStructural(spec.structural, mol, opts) : [];
   const counts: Record<CheckStatus, number> = { pass: 0, fail: 0, borderline: 0, unknown: 0 };
   for (const r of [...constraints, ...structural]) counts[r.status] += 1;
   const overall: CheckStatus = counts.fail > 0 ? "fail" : counts.borderline > 0 ? "borderline" : counts.unknown > 0 ? "unknown" : "pass";

@@ -71,3 +71,21 @@ describe("profile adapter", () => {
     expect(p.logS).toBeUndefined();
   });
 });
+
+describe("candidate evaluator on RDKit WebAssembly", () => {
+  it("profiles a molecule with computed descriptors and predicted properties, with provenance", async () => {
+    const { candidateEvaluator } = await import("../src/design/candidateEvaluator");
+    const ev = candidateEvaluator(engine);
+    const p = await ev.profile(getSampleMolecule("ethanol")!);
+    expect(p.mw!.kind).toBe("computed");
+    expect(p.mw!.value).toBeCloseTo(46.07, 1);
+    expect(p.tb!.kind).toBe("predicted");
+    expect(p.tb!.value).toBeCloseTo(64.4, 0);
+    expect(p.tb!.method).toMatch(/Joback/);
+    expect(p.logS!.kind).toBe("predicted");
+    expect(p.hansenDh!.value).toBeGreaterThan(15);
+    expect(p.acidBase!.value).toBe("neutral");
+    expect(p.qed).toBeUndefined(); // server-only
+    expect(ev.models.some((m) => /Joback/.test(m))).toBe(true);
+  }, 60_000);
+});
