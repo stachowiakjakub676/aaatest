@@ -6,7 +6,7 @@
  * the in-browser engine computes, so they work offline; QED and synthetic accessibility come
  * from the server engine when it is available.
  */
-import { JOBACK_GROUPS, detectFunctionalGroups, findCycles, getAtom, girolamiDensity, implicitHydrogenCount, jobackEstimates, neighborsOf, bondsOfAtom } from "@molecular-cad/molecule-model";
+import { JOBACK_GROUPS, acentricFactor, boilingPointAtPressure, detectFunctionalGroups, findCycles, getAtom, girolamiDensity, hansenParameters, implicitHydrogenCount, jobackEstimates, molecularWeight, neighborsOf, bondsOfAtom, rankSolvents, vapourPressure, watsonHvap } from "@molecular-cad/molecule-model";
 import type { Molecule } from "@molecular-cad/molecule-model";
 import type { ChemistryEngine, ComputedProperties, Prediction, PredictionService } from "./engine";
 
@@ -197,13 +197,8 @@ export function physicalPredictions(mol: Molecule, props: ComputedProperties | n
   out.push({ kind: "predicted", id: "joback-state", group: "Physical (group contribution)", model: `derived from the ${JOBACK_CITATION} estimates`, label: "Physical state at 25 °C", value: state, uncertainty: "follows the Tb/Tm estimates and inherits their errors", reasoning: [`${state[0]!.toUpperCase()}${state.slice(1)}: ${stateWhy}.`] });
   if (j.hvap !== null) {
     out.push({ kind: "predicted", id: "joback-hvap", group: "Physical (group contribution)", model: JOBACK_CITATION, label: "Enthalpy of vaporisation at Tb", value: round(j.hvap), unit: "kJ/mol", uncertainty: "average absolute error ≈ 1.3 kJ/mol", breakdown: jobackBreakdown(j.groups, j.contributions.hvap, "kJ/mol", 15.3, "Base value"), reasoning: ["Energy to separate the molecules of the liquid: hydrogen-bonding groups (OH +16.8, COOH +19.5 kJ/mol) dominate, hydrocarbon groups add ~2 kJ/mol each."] });
-    if (tb > T - margin) {
-      // Clausius–Clapeyron from the normal boiling point, ΔHvap taken as constant.
-      const lnP = (-(j.hvap * 1000) / 8.314) * (1 / T - 1 / tb);
-      const pKpa = 101.325 * Math.exp(lnP);
-      out.push({ kind: "predicted", id: "cc-vp", group: "Physical (group contribution)", model: "Clausius–Clapeyron from the Joback Tb and ΔHvap", label: "Vapour pressure at 25 °C", value: pKpa >= 1 ? round(pKpa, 1) : pKpa >= 0.001 ? round(pKpa, 4) : Number(pKpa.toExponential(2)), unit: "kPa", uncertainty: "order of magnitude only: assumes ΔHvap independent of temperature and compounds the Tb error (10 K in Tb ≈ factor 1.5–2 in pressure)", reasoning: [`ln(p/101.3 kPa) = −ΔHvap/R · (1/298 K − 1/${round(tb)} K).`, pKpa > 10 ? "Volatile: evaporates readily at room temperature." : pKpa > 0.1 ? "Moderately volatile." : "Low volatility: little vapour at room temperature."] });
-    }
   }
+  if (j.tc !== null && j.pc !== null && j.hvap !== null) out.push(...phasePredictions(j, mol, props));
   if (j.tc !== null && j.pc !== null) {
     out.push({ kind: "predicted", id: "joback-tc", group: "Physical (group contribution)", model: JOBACK_CITATION, label: "Critical temperature / pressure", value: `${round(j.tc)} K / ${round(j.pc)} bar`, uncertainty: "Tc average error ≈ 0.8 %, Pc ≈ 5 %; Tc is scaled from the Tb estimate", reasoning: ["Above the critical temperature no pressure can liquefy the vapour; relevant for supercritical extraction and for equation-of-state work."] });
   }
@@ -221,6 +216,82 @@ export function physicalPredictions(mol: Molecule, props: ComputedProperties | n
     }
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Lee–Kesler vapour pressure, boiling point under vacuum, Hansen parameters
+// ---------------------------------------------------------------------------
+
+const LK_CITATION = "Lee–Kesler correlation (AIChE J. 1975) on the Joback Tc, pc and Tb";
+
+/** Vapour pressure at 25 °C, ΔHvap at 25 °C and the boiling point on a rotary evaporator (20 mbar). */
+function phasePredictions(j: ReturnType<typeof jobackEstimates>, _mol: Molecule, _props: ComputedProperties | null): Prediction[] {
+  const out: Prediction[] = [];
+  const { tb, tc, pc, hvap } = j;
+  if (tb === null || tc === null || pc === null || hvap === null) return out;
+  const omega = acentricFactor(tb, tc, pc);
+  const T = 298.15;
+  const vp = vapourPressure(T, tc, pc, omega);
+  if (vp !== null) {
+    const pKpa = vp * 100;
+    out.push({
+      kind: "predicted",
+      id: "lk-vp",
+      group: "Physical (group contribution)",
+      model: LK_CITATION,
+      label: "Vapour pressure at 25 °C",
+      value: pKpa >= 1 ? round(pKpa, 1) : pKpa >= 0.001 ? round(pKpa, 4) : Number(pKpa.toExponential(2)),
+      unit: "kPa",
+      uncertainty: "the correlation itself is good to a few percent for ordinary organics; the Joback inputs dominate the error (10 K in Tb ≈ factor 1.5–2 in pressure)",
+      reasoning: [`ln(p/pc) = f0(Tr) + ω·f1(Tr) with ω = ${round(omega, 3)} from Tb/Tc = ${round(tb / tc, 3)}.`, pKpa > 10 ? "Volatile: evaporates readily at room temperature." : pKpa > 0.1 ? "Moderately volatile." : "Low volatility: little vapour at room temperature."],
+    });
+  }
+  const tVac = boilingPointAtPressure(0.02, tc, pc, omega);
+  if (tVac !== null) {
+    out.push({
+      kind: "predicted",
+      id: "lk-tb-vac",
+      group: "Physical (group contribution)",
+      model: LK_CITATION,
+      label: "Boiling point at 20 mbar (rotary evaporator)",
+      value: round(tVac - 273.15),
+      unit: `°C (${round(tVac)} K)`,
+      uncertainty: "inherits the Tb error; the vacuum boiling point is typically 10–20 K less certain than the normal one. See the Phase tab for other pressures",
+      reasoning: [`The vapour curve is inverted at 20 mbar; lowering the pressure from 1013 to 20 mbar drops the boiling point by about ${round(tb - tVac)} K for this molecule.`],
+    });
+  }
+  const hvap25 = watsonHvap(T, tb, tc, hvap);
+  if (hvap25 !== null && tb > T) {
+    out.push({ kind: "predicted", id: "watson-hvap25", group: "Physical (group contribution)", model: "Watson scaling of the Joback ΔHvap(Tb)", label: "Enthalpy of vaporisation at 25 °C", value: round(hvap25), unit: "kJ/mol", uncertainty: "Watson's exponent 0.38 is a typical value; ±2 kJ/mol on top of the Joback error", reasoning: ["ΔHvap grows as the liquid cools away from the critical point: ΔHvap(T) = ΔHvap(Tb)·((1−T/Tc)/(1−Tb/Tc))^0.38."] });
+  }
+  return out;
+}
+
+/** Hansen solubility parameters (group contribution) with the closest solvents from the table. */
+export function hansenPrediction(mol: Molecule, molarMass: number | undefined): Prediction | null {
+  const mw = molarMass ?? molecularWeight(mol, { includeImplicitHydrogens: true }).value;
+  if (mw === undefined) return null;
+  const dens = girolamiDensity(mol, mw);
+  if (!dens) return null;
+  const h = hansenParameters(mol, mw / dens.density);
+  if (!h) return null;
+  const top = rankSolvents(h).slice(0, 3);
+  return {
+    kind: "predicted",
+    id: "hansen",
+    group: "Solvents (Hansen)",
+    model: "Hoftyzer–Van Krevelen group contributions (Properties of Polymers, 2009) with the Girolami molar volume",
+    label: "Hansen parameters δd / δp / δh",
+    value: `${round(h.dd)} / ${round(h.dp)} / ${round(h.dh)}`,
+    unit: "MPa½",
+    uncertainty: "typically 1–2 MPa½ per component, δh the least reliable; the molar volume adds ~5 %",
+    breakdown: h.groups.map((g, i) => ({ label: `${g.label}: Fd ${round(h.contributions[i]!.fd, 0)}, Fp ${round(h.contributions[i]!.fp, 0)}, Eh ${round(h.contributions[i]!.eh, 0)}`, count: g.count, contribution: round(h.contributions[i]!.fd / h.molarVolume, 2), unit: "MPa½ to δd" })),
+    reasoning: [
+      `Dispersion δd ${round(h.dd)}: ΣFd ${round(h.contributions.reduce((s, c) => s + c.fd, 0), 0)} over V = ${round(h.molarVolume)} cm³/mol. Polar δp ${round(h.dp)} and hydrogen bonding δh ${round(h.dh)} come from the polar and H-bonding groups.`,
+      `Closest solvents by Hansen distance: ${top.map((m) => `${m.solvent.name} (Ra ${round(m.ra)})`).join(", ")}. Small Ra means similar cohesion energy, which favours miscibility ("like dissolves like"); see the Materials tab.`,
+      ...h.notes,
+    ],
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -302,7 +373,7 @@ export class CompositePredictionService implements PredictionService {
     private readonly engine: ChemistryEngine,
     private readonly propsRef: () => ComputedProperties | null,
   ) {
-    this.label = engine.capabilities.estimates ? "Joback, Girolami, ESOL and class pKa (client) + QED and SA score (server)" : "Joback, Girolami, ESOL and class pKa (client); QED and SA score need the server engine";
+    this.label = engine.capabilities.estimates ? "Joback, Lee–Kesler, Girolami, Hansen, ESOL and class pKa (client) + QED and SA score (server)" : "Joback, Lee–Kesler, Girolami, Hansen, ESOL and class pKa (client); QED and SA score need the server engine";
   }
 
   async predict(mol: Molecule): Promise<Prediction[]> {
@@ -315,6 +386,8 @@ export class CompositePredictionService implements PredictionService {
     }
     const ab = acidBasePrediction(mol);
     if (ab) out.push(ab);
+    const hansen = hansenPrediction(mol, props?.molecularWeight);
+    if (hansen) out.push(hansen);
     if (this.engine.capabilities.estimates) {
       try {
         out.push(...(await this.engine.estimates(mol)).map((p) => ({ group: "Drug-likeness (server)", ...p })));
@@ -336,6 +409,10 @@ export function summarizePredictions(preds: Prediction[]): string[] {
   if (tb) lines.push(`Likely ${state ? String(state.value) : "phase unknown"} at room temperature; estimated boiling point ${tb.value} °C${tm ? `, melting point ${tm.value} °C` : ""} (group contribution, ±13 K / ±25 K typical).`);
   const dens = by("girolami-density");
   if (dens) lines.push(`Estimated density ${dens.value} g/cm³.`);
+  const vac = by("lk-tb-vac");
+  if (vac) lines.push(`On a rotary evaporator (20 mbar) it should boil near ${vac.value} °C.`);
+  const hansen = by("hansen");
+  if (hansen) lines.push(`Hansen parameters δd/δp/δh ≈ ${hansen.value} MPa½.`);
   const sol = by("esol-logs");
   if (sol) {
     const v = Number(sol.value);

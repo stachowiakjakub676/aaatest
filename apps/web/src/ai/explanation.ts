@@ -103,8 +103,26 @@ const INTENTS: Intent[] = [
       const tb = est(r, "joback-tb");
       const na = est(r, "joback-na");
       if (!tb) return na ? `No boiling-point estimate: ${na.uncertainty}.` : noData("boiling-point estimate");
-      const vp = est(r, "cc-vp");
+      const vp = est(r, "lk-vp");
       return [`Predicted boiling point about ${fmt(tb.value)} °C (Joback group contributions, typical error ±13 K; a model, not a measurement).`, ...tb.reasoning, vp ? `Vapour pressure at 25 °C roughly ${fmt(vp.value)} ${vp.unit} (order of magnitude).` : null].filter(Boolean).join(" ");
+    },
+  },
+  {
+    id: "vacuum",
+    patterns: /vacuum|rotavap|rotary|mbar|torr|reduced pressure|pró[żz]ni|rotawap|obni[żz]on|ci[śs]nien/i,
+    answer(r) {
+      const v = est(r, "lk-tb-vac");
+      if (!v) return noData("vacuum boiling-point estimate (needs the Joback critical constants)");
+      return [`At 20 mbar (a typical rotary evaporator) the predicted boiling point is about ${fmt(v.value)} °C (Lee–Kesler vapour-pressure correlation on the Joback constants).`, ...v.reasoning, "The Phase tab has a calculator for any pressure and the full P–T diagram."].join(" ");
+    },
+  },
+  {
+    id: "solvent",
+    patterns: /solvent|hansen|rozpuszczalnik|crystalli[sz]|krystalizac|miscib|mieszaln/i,
+    answer(r) {
+      const h = est(r, "hansen");
+      if (!h) return noData("Hansen estimate (the group table does not cover this structure, or descriptors are missing)");
+      return [`Hansen parameters δd/δp/δh about ${h.value} MPa½ (Hoftyzer–Van Krevelen group contributions, ±1–2 MPa½ per component).`, ...h.reasoning.slice(1, 2), "The Materials tab ranks the whole solvent table and proposes greener substitutes (CHEM21 classes)."].join(" ");
     },
   },
   {
@@ -235,7 +253,7 @@ export function answerQuestion(r: AnalysisReport, question: string): string {
   const hits = INTENTS.filter((i) => i.patterns.test(q));
   const answers = hits.map((i) => i.answer(r)).filter((a): a is string => a !== null);
   if (answers.length === 0) {
-    return `I can answer from the report about: boiling and melting point, physical state, solubility, density, acid/base character, lipophilicity (logP), polarity, drug-likeness rules, stereochemistry, functional groups, formula and weight, validity, novelty, and the rule-based synthesis plan. Try for example “why is the boiling point high?” or “is it soluble in water?”.`;
+    return `I can answer from the report about: boiling and melting point (also under vacuum), physical state, solubility, solvents (Hansen parameters), density, acid/base character, lipophilicity (logP), polarity, drug-likeness rules, stereochemistry, functional groups, formula and weight, validity, novelty, and the rule-based synthesis plan. Try for example “why is the boiling point high?” or “is it soluble in water?”.`;
   }
   return answers.slice(0, 3).join("\n\n");
 }

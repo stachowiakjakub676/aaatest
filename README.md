@@ -135,7 +135,7 @@ The editor is built for inventing structures, not browsing a catalogue:
 
 ## Assistant and retrosynthesis (phases 7–8)
 
-The right panel has four tabs: **Inspect**, **Chemistry**, **Assistant**, **Retro**.
+The right panel has six tabs: **Inspect**, **Chemistry**, **Phase**, **Materials**, **Assistant**, **Retro**.
 
 - **Assistant.** A deterministic `MoleculeAnalysisService` turns the molecule, its validation and
   the engine's descriptors into a structured `AnalysisReport` (with Lipinski rule checks, labelled
@@ -170,6 +170,36 @@ The right panel has four tabs: **Inspect**, **Chemistry**, **Assistant**, **Retr
   notes per candidate and copy the whole analysis as JSON. A `SafetyPolicy` gates what is shown:
   model-generated details stay hidden until reviewed, and a pluggable `TargetScreener` can withhold
   operational details for a deployment's restricted targets (none is shipped).
+
+## Phase behaviour and solvents (phase 11)
+
+Clapeyron's namesake: the **Phase** tab builds a pressure–temperature diagram of the drawn compound
+from the Joback estimates and answers the everyday question "at what temperature will this boil on
+my rotary evaporator?"; the **Materials** tab estimates Hansen solubility parameters and matches
+them against a solvent table with greenness classes.
+
+- **Phase.** The acentric factor ω is back-calculated from Tb, Tc and pc (Lee–Kesler); the same
+  correlation gives the vapour-pressure curve, which is inverted for the boiling point at any
+  pressure (presets: 1 atm, 100 mbar, 20 mbar rotavap, 1 mbar). ΔHvap follows Watson's scaling.
+  The solid boundaries come from Clausius–Clapeyron: the sublimation line with
+  ΔHsub = ΔHfus + ΔHvap at the triple point (taken at the Joback melting point), the melting
+  line with ΔVfus ≈ 10 % of the Girolami molar volume. The diagram shows the three boundaries, the
+  triple and critical points, the standard state and your chosen conditions; hovering reads the
+  phase anywhere. Every number is an estimate: ten kelvin of error in Tb is a factor 1.5–2 in
+  pressure, and the melting point is the least reliable Joback property.
+- **Materials.** Hansen parameters δd/δp/δh by the Hoftyzer–Van Krevelen group method (with the
+  book's symmetry rule for identical halogens on one carbon) over the Girolami molar volume, with
+  the group breakdown. Forty-six common solvents with Hansen's measured parameters, boiling points
+  and their **CHEM21** class (recommended / problematic / hazardous / highly hazardous, Prat et
+  al. 2016) are ranked by Hansen distance Ra to the molecule ("like dissolves like"); a second tool
+  proposes greener substitutes for any solvent in the table (for example ethyl acetate or
+  2-MeTHF for dichloromethane). Both are rankings by cohesion-energy similarity, not guarantees of
+  equal performance, and the classes are transcribed from the guide: check the source and the
+  safety data sheet before acting on one.
+- Both tabs refuse structures their group tables do not cover (hetero-aromatic and fused rings,
+  alkynes, sulfur groups, iodine…) instead of guessing, and the Chemistry tab and the assistant
+  carry the same numbers (vapour pressure at 25 °C, boiling point at 20 mbar, ΔHvap at 25 °C,
+  Hansen parameters with the closest solvents).
 
 ## Principles
 

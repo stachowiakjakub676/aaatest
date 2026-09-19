@@ -1280,3 +1280,217 @@ kbd {
   padding: 3px 10px;
   font-size: 14px;
 }
+
+/* ---------------------------------------------------------------------------
+   Phase diagram and materials (chart series colours validated for both surfaces)
+   --------------------------------------------------------------------------- */
+:root {
+  --viz-1: #3987e5;
+  --viz-2: #d95926;
+  --viz-3: #199e70;
+}
+:root[data-theme="light"] {
+  --viz-1: #2a78d6;
+  --viz-2: #eb6834;
+  --viz-3: #1baf7a;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --viz-1: #2a78d6;
+    --viz-2: #eb6834;
+    --viz-3: #1baf7a;
+  }
+}
+/* Six tabs: wrap onto a second row when the panel is narrow instead of clipping the last one. */
+.tabs {
+  flex-wrap: wrap;
+}
+.tabs .tab {
+  flex: 1 0 30%;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  padding: 0 8px;
+}
+.phase-diagram {
+  margin: 8px 0 4px;
+}
+.phase-diagram svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--font-ui);
+}
+.phase-diagram .grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.phase-diagram .axis {
+  fill: var(--text-muted);
+  font-size: 9px;
+}
+.phase-diagram .region {
+  fill: var(--text-muted);
+  font-size: 10px;
+  font-style: italic;
+  opacity: 0.8;
+}
+.phase-diagram .series {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.phase-diagram .series-1,
+.phase-diagram .swatch.series-1 {
+  stroke: var(--viz-1);
+  background: var(--viz-1);
+}
+.phase-diagram .series-2,
+.phase-diagram .swatch.series-2 {
+  stroke: var(--viz-2);
+  background: var(--viz-2);
+}
+.phase-diagram .series-3,
+.phase-diagram .swatch.series-3 {
+  stroke: var(--viz-3);
+  background: var(--viz-3);
+}
+.phase-diagram .series-label {
+  font-size: 9px;
+  fill: var(--text);
+  stroke: none;
+}
+.phase-diagram .point {
+  fill: var(--panel-2);
+  stroke: var(--text);
+  stroke-width: 1.5;
+}
+.phase-diagram .marker {
+  fill: var(--select);
+  stroke: var(--panel-2);
+  stroke-width: 2;
+}
+.phase-diagram .marker-std {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 1.5;
+  stroke-dasharray: 2 2;
+}
+.phase-diagram .hover line {
+  stroke: var(--text-muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  pointer-events: none;
+}
+.phase-diagram .hover rect {
+  fill: var(--panel);
+  stroke: var(--border-strong);
+  pointer-events: none;
+}
+.phase-diagram .hover text {
+  fill: var(--text);
+  font-size: 9px;
+  pointer-events: none;
+}
+.phase-diagram .legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.phase-diagram .swatch {
+  display: inline-block;
+  width: 14px;
+  height: 3px;
+  vertical-align: middle;
+  margin-right: 4px;
+  border-radius: 2px;
+}
+.phase-diagram .swatch.hollow {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--text);
+  background: transparent;
+}
+.hansen-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin: 4px 0;
+}
+.hansen-grid > div {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hansen-grid strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+.solvent-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin: 4px 0;
+}
+.solvent-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 4px;
+  border-bottom: 1px solid var(--border-strong);
+}
+.solvent-table td {
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.solvent-table td .muted {
+  font-size: 10px;
+}
+.breakdown th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 10px;
+  padding: 2px 4px;
+  border-bottom: 1px solid var(--border-strong);
+}
+.class-chip {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  white-space: nowrap;
+}
+.class-chip.class-0 {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.class-chip.class-1 {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.class-chip.class-2 {
+  border-color: var(--err);
+  color: var(--err);
+}
+.class-chip.class-3 {
+  background: var(--err);
+  border-color: var(--err);
+  color: #fff;
+}

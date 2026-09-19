@@ -31,6 +31,8 @@ import { ShortcutsOverlay } from "./ui/ShortcutsOverlay";
 import { AssistantPanel } from "./ui/AssistantPanel";
 import type { ExplainerChoice, QaEntry } from "./ui/AssistantPanel";
 import { RetroPanel } from "./ui/RetroPanel";
+import { PhasePanel } from "./ui/PhasePanel";
+import { MaterialsPanel } from "./ui/MaterialsPanel";
 import { RULE_ANALYSIS } from "./ai/analysis";
 import { applySuggestion } from "./ai/suggestions";
 import { RemoteExplanationService, TemplateExplanationService } from "./ai/explanation";
@@ -41,10 +43,12 @@ import { PROVENANCE_POLICY, applySafetyDecision } from "./retro/types";
 import { RuleBasedSynthesisPlanner, describeRoute } from "./retro/synthesis";
 import type { Precursor, SynthesisPlan } from "./retro/synthesis";
 
-type RightTab = "inspect" | "chemistry" | "assistant" | "retro";
+type RightTab = "inspect" | "chemistry" | "phase" | "materials" | "assistant" | "retro";
 const TABS: Array<[RightTab, string]> = [
   ["inspect", "Inspect"],
   ["chemistry", "Chemistry"],
+  ["phase", "Phase"],
+  ["materials", "Materials"],
   ["assistant", "Assistant"],
   ["retro", "Retro"],
 ];
@@ -725,6 +729,16 @@ export function App() {
           optimizing={optimizing}
           hasAtoms={molecule.atoms.length > 0}
         />
+          </div>
+        )}
+        {tab === "phase" && (
+          <div className="panel-content">
+            <PhasePanel molecule={molecule} molarMass={chemistry.state.properties?.molecularWeight} />
+          </div>
+        )}
+        {tab === "materials" && (
+          <div className="panel-content">
+            <MaterialsPanel molecule={molecule} molarMass={chemistry.state.properties?.molecularWeight} />
           </div>
         )}
         {tab === "assistant" && (
