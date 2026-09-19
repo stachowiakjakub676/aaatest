@@ -1502,3 +1502,264 @@ kbd {
   flex: 1 1 0;
   min-width: 0;
 }
+
+/* ---------------------------------------------------------------------------
+   Design workspace (stage 3): specification builder + requirement sheet + live check
+   --------------------------------------------------------------------------- */
+.view-switch {
+  flex: 0 0 auto;
+}
+.view-switch .seg-item {
+  padding: 4px 12px;
+}
+.design-view {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: grid;
+  grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
+  gap: 1px;
+  background: var(--border);
+  min-height: 0;
+}
+.spec-builder,
+.design-main {
+  background: var(--panel);
+  overflow-y: auto;
+  min-height: 0;
+}
+.design-main {
+  background: var(--viewport-bg);
+}
+.design-main .panel-section {
+  background: var(--panel);
+  margin: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.design-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+.constraint-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.constraint-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  background: var(--panel-2);
+}
+.constraint-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.constraint-main .select.prop {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.constraint-main .select.op {
+  flex: 0 0 auto;
+}
+.constraint-main .bound {
+  flex: 0 1 72px;
+  min-width: 56px;
+}
+.constraint-main .unit {
+  font-size: 11px;
+}
+.constraint-main .weight {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.constraint-main .weight input {
+  width: 90px;
+}
+.provenance {
+  margin-top: 4px;
+}
+.chip-on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  margin: 6px 0;
+}
+textarea.input {
+  font: inherit;
+  resize: vertical;
+}
+.check-table tr.check-pass td:last-child {
+  color: var(--ok);
+}
+.check-table tr.check-fail td:last-child {
+  color: var(--err);
+}
+.check-table tr.check-unknown td:last-child {
+  color: var(--warn);
+}
+@media (max-width: 900px) {
+  .design-view {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    overflow-y: auto;
+  }
+}
+
+.candidate-table td .small,
+.candidate-table .small {
+  font-size: 11px;
+}
+.candidate-table tr.cand-rejected td {
+  opacity: 0.75;
+}
+.check-table tr.check-borderline td:last-child {
+  color: var(--warn);
+}
+
+.link-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+}
+.link-btn.small {
+  font-size: 11px;
+}
+.candidate-table .verdict-reason {
+  max-width: 320px;
+}
+.checks-row td {
+  background: var(--panel-2);
+}
+.checks-row .reasoning li.check-pass .mono {
+  color: var(--ok);
+}
+.checks-row .reasoning li.check-fail .mono {
+  color: var(--err);
+}
+.checks-row .reasoning li.check-borderline .mono,
+.checks-row .reasoning li.check-unknown .mono {
+  color: var(--warn);
+}
+.candidate-table tr.check-pass > td:nth-child(3) .status {
+  font-weight: 600;
+}
+
+.rank-cell {
+  min-width: 96px;
+}
+.rank-badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+}
+.rank-badge.front {
+  border-color: var(--select);
+  color: var(--select);
+  font-weight: 600;
+}
+.score-bar {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin: 4px 0 2px;
+  overflow: hidden;
+}
+.score-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.tradeoffs {
+  margin: 6px 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+
+.compare-scroll {
+  overflow-x: auto;
+  margin: 6px 0;
+}
+.compare-table th.compare-col {
+  min-width: 220px;
+  vertical-align: top;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+  color: var(--text);
+}
+.compare-table .compare-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+.compare-table td.compare-label,
+.compare-table th.compare-label {
+  min-width: 200px;
+  position: sticky;
+  left: 0;
+  background: var(--panel);
+}
+.compare-table tr.compare-group td {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding-top: 8px;
+}
+.compare-table td.compare-best {
+  background: color-mix(in srgb, var(--ok) 18%, transparent);
+  font-weight: 600;
+}
+.compare-3d {
+  height: 160px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--viewport-bg);
+  position: relative;
+  overflow: hidden;
+  margin: 4px 0;
+}
+.compare-3d .viewport-canvas,
+.compare-3d > div {
+  width: 100%;
+  height: 100%;
+}
+.compare-table .structure-svg {
+  background: var(--panel-2);
+  border-radius: var(--radius);
+  margin: 4px 0;
+}
+.compare-table .structure-svg svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.run-table tr.run-current td {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.reasoning.small {
+  font-size: 11px;
+}

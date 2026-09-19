@@ -223,6 +223,86 @@ them against a solvent table with greenness classes.
   carry the same numbers (vapour pressure at 25 °C, boiling point at 20 mbar, ΔHvap at 25 °C,
   Hansen parameters with the closest solvents).
 
+## Design engine (stage 3, phase 3A)
+
+The **Design** switch in the header opens the design workspace: the program is moving from
+"what are the properties of this molecule?" to "I need a molecule that satisfies these
+requirements". Phase 3A delivers the data model and the specification builder; candidate
+generation, filtering, ranking and comparison follow in phases 3B–3F on the same model.
+
+- **`packages/design-engine`** is a separate package with a small API. Its *property catalogue*
+  lists every quantity a specification may constrain, with the provenance class the current tools
+  supply (computed / predicted / estimated / experimental / database), the method and its typical
+  error. A *specification* has hard constraints (range, bound or category on a catalogue
+  property), soft preferences (higher / lower / close to a target, with a weight, stored now and
+  used for ranking in phase 3D), and structural constraints (allowed elements, heavy-atom range,
+  neutrality, required and forbidden SMARTS). `validateSpecification` reports incomplete or
+  contradictory requirements; `evaluateSpecification` checks a candidate *profile* (values with
+  provenance) and returns pass / fail / unknown per requirement with the reason, never a bare
+  score. Specification files (`kind: "clapeyron-specification"`) round-trip through
+  `serializeSpecification` / `parseSpecification`.
+- **Builder.** Property pickers grouped by domain show the method and error next to every
+  requirement; live validation; element chips, heavy-atom range, neutrality, SMARTS lists (checked
+  by RDKit from phase 3B); autosave in the browser; import/export as JSON.
+- **Candidates (phase 3B).** *Generate and validate* runs a `CandidateGenerator` and records every
+  candidate with its provenance. Two deterministic generators ship: *derivatives of the editor
+  molecule* (each library fragment attached at each hydrogen-bearing C, N or O of the seed, one
+  substitution per candidate, sites and fragments in a fixed order) and a *library screen* (the
+  248 building blocks and the 46 solvents, parsed through the engine). Validation runs in stages
+  and keeps the stage and reason of every rejection: structural scope (elements, heavy atoms,
+  charge) → graph validity (valence, connectivity) → RDKit sanitisation → duplicates by canonical
+  SMILES → required and forbidden SMARTS (matched by RDKit in the browser). Nothing invalid reaches
+  later stages. A run stores the specification snapshot, generator and parameters, seed, engine
+  version and timestamps and exports as `kind: "clapeyron-design-run"`; any candidate opens in a
+  new editor tab.
+- **Evaluation and filtering (phase 3C).** Every valid candidate is profiled with the same
+  descriptors and models as the Chemistry tab (RDKit descriptors, Joback, Lee–Kesler, Girolami,
+  ESOL, Hansen, class pKa; QED/SA when the server engine is selected), once per canonical
+  structure (a session cache), and checked against the hard constraints: the table shows the
+  verdict (pass / borderline / fail / undecided), the first reason for anything but a clean pass,
+  one column per property the specification mentions (each value tagged computed or predicted,
+  method and error on hover) and an expandable list of every requirement with its reason. Filters:
+  all, passing, passing or borderline, failing, undecided, rejected. The run records the models
+  used and the cache hits.
+- **Ranking and trade-offs (phase 3D).** The soft preferences are objectives. Each passing or
+  borderline candidate with every preferred property available gets a per-objective satisfaction
+  (0–100 % over the ranked population; higher / lower / close to a target), a **Pareto front**
+  number (★ front: no other candidate is at least as good on every objective and better on one;
+  fronts are peeled layer by layer) and a weighted score from your weights. The table orders by
+  front, then weighted score; a trade-off block lists each objective's range and best candidate,
+  the Pareto front members and, for two objectives, a scatter with the front highlighted.
+  Ineligible candidates say why (failed, missing value, not evaluated). There is no single
+  "best molecule": the front keeps every trade-off visible, the weights only order it.
+- **Comparison (phase 3E).** Tick up to six candidates (or *Compare the front*) for a
+  side-by-side matrix: 2D depiction and a rotatable 3D structure per candidate, verdict and
+  rank, the hard constraints with each candidate's verdict and value, then every property any
+  of them has a value for, grouped by domain, each tagged computed or predicted with the method
+  and error on hover. A cell is highlighted as best in its row only where a soft preference says
+  which direction is better. The matrix exports as CSV; any column opens in the editor.
+- **Iteration and reproducibility (phase 3F).** A candidate opened in the editor carries its
+  lineage; after editing it, *Add to run* validates and evaluates the edited molecule against
+  the run's specification and appends it as a candidate whose origin says "edited candidate X in
+  the 3D editor" (duplicates of the run are rejected as such). When the specification changes
+  after a run, the workspace says so and *Re-evaluate* re-applies the hard constraints to the
+  existing profiles without recomputing anything (changed structural rules are called out: they
+  need a new run). Every run of the session is listed with its counts and can be viewed again or
+  **repeated** exactly from its stored specification snapshot, generator, parameters and seed
+  molecule (the repeat records which run it reproduces); runs import and export as
+  `kind: "clapeyron-design-run"` files, which hold the specification snapshot, generator,
+  parameters, seed, engine and model versions, timestamps, every candidate with its origin,
+  status and reasons, profiles and verdicts, and a history of later additions and
+  re-evaluations.
+- **Margins.** Predicted properties carry a typical error (13 K for the Joback boiling point,
+  1 log unit for ESOL, …). A miss smaller than that error is reported as *borderline*, not as a
+  fail, so a candidate is never rejected on a difference the model cannot resolve; the builder
+  shows the margin next to each property and marks the ones that need the server engine.
+- **Requirement sheet and live check.** The right pane renders the specification in words and
+  checks the molecule open in the editor against it, using the same descriptors and predictions
+  the Chemistry tab shows (`design/profile.ts` maps them onto the catalogue): each row carries
+  the actual value with its provenance tag, the verdict and, on hover, the reason including the
+  model error. A molecule passes only when every requirement passes; missing values leave it
+  undecided rather than failing it.
+
 ## Principles
 
 - The molecular graph (`packages/molecule-model`) is the source of truth; the renderer is derived from it.

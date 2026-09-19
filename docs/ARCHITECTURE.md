@@ -380,6 +380,82 @@ step) and on demand (Tidy, 800 iterations). Real optimisation remains the engine
   class, greener-replacement tool that works without a molecule). The molar volume comes from the
   engine's molecular weight when available (model weight otherwise) and the Girolami density.
 
+## 4l. Design engine (stage 3, phase 3A)
+
+- `packages/design-engine/src/properties.ts`: `PROPERTY_CATALOGUE` (26 keys: RDKit descriptors,
+  Joback/Lee–Kesler/Girolami/ESOL/Hansen predictions, class pKa category, server QED/SA) with
+  domain, type, unit, `ValueKind`, method and uncertainty; the single place that says where a
+  value comes from.
+- `specification.ts`: `Specification` (hard `HardConstraint[]` with ops between/≤/≥/in, soft
+  `SoftPreference[]` with direction and weight, `StructuralConstraints`), constructors, `touch`,
+  `validateSpecification` (unknown property, missing/inverted bounds, categorical misuse, bad
+  weights, unknown elements, inverted heavy-atom range, empty or contradictory SMARTS, empty
+  specification) and the `describe*` helpers used by the sheet and reports.
+- `evaluation.ts`: `CandidateProfile` (catalogue key → `PropertyValue` with kind, method,
+  uncertainty), `checkConstraint` (pass/fail/unknown with a reason that quotes the model error
+  for predicted values), `checkStructural` (elements, heavy atoms, charge and connectivity from
+  the graph; SMARTS rules stay unknown until the engine checks them in phase 3B),
+  `evaluateSpecification` (overall verdict and counts).
+- `serialization.ts`: specification files, version 1, shape-validated on read.
+- Web: `design/profile.ts` maps `ChemistryState` (descriptors, predictions, Hansen from the
+  model) onto a profile; `design/useSpecification.ts` holds the specification with browser
+  storage and import/export; `ui/design/SpecificationBuilder.tsx` and `ui/design/DesignView.tsx`
+  (requirement sheet + live check of the editor molecule). `App.tsx` gains an Editor/Design view
+  switch; the design view replaces the toolbox/viewport/inspector row, the editor state is kept.
+- Phase 3B. `candidates.ts`: `CandidateGenerator` interface (id, label, defaults, async
+  `generate(input, params, onProgress)`), `CandidateOrigin` (generator, strategy, parent,
+  operations, library entry), `structuralRejection` and `substitutionSites`;
+  `DERIVATIVE_GENERATOR` (fragment substitution on the seed through the model's `attachFragment`,
+  moved from the editor commands into `molecule-model/src/attach.ts`) and `LIBRARY_GENERATOR`
+  (named libraries parsed through a caller-supplied SMILES parser). `run.ts`: `DesignRun`
+  (specification snapshot, generator + params, seed, provenance, records, summary, rejections by
+  stage), `StructureTools` (what validation needs from the engine: validate, canonical SMILES,
+  substructure test), `validateCandidates` (structural → graph → engine → duplicate →
+  substructure, every rejection with stage and reason), run files. Evaluation gains a
+  `borderline` status: a miss within the property's `errorAbs`/`errorRel` is not a fail
+  (`margins` option, default on); `requires: "server"` marks QED/SA.
+- Web: `WasmRdkitEngine.hasSubstructure` (get_qmol + get_substruct_match, null for a bad
+  pattern); `design/structureTools.ts` adapts the engine; `design/useDesignRun.ts` runs
+  generate → validate with progress and a cancellation token, building the libraries from
+  `BUILDING_BLOCKS` and `SOLVENTS`; `ui/design/CandidatesPanel.tsx` (generator, limit, summary,
+  provenance line, table with origin and status, show/hide rejected, export, open in a new tab).
+- Phase 3C. `evaluator.ts`: `CandidateEvaluator` (models list + `profile(molecule)`),
+  `ProfileCache` keyed by canonical SMILES, `evaluateRun` (profiles every valid record, applies
+  `evaluateSpecification` with `substructuresVerified` since the validation stage already
+  matched the SMARTS, keeps evaluator errors on the record as undecided, summarises
+  passed/borderline/failed/undecided and cache hits, merges the models into the run's
+  provenance), `filterRecords` and `verdictReason`. Web: `design/candidateEvaluator.ts` builds
+  profiles from `engine.properties` + `CompositePredictionService` through `profileFromChemistry`
+  (now taking a `ProfileSource`); `useDesignRun` chains evaluate after validate with a per-session
+  cache; the candidates panel shows verdicts, reasons, property columns from the specification,
+  filters and an expandable per-requirement check list.
+- Phase 3D. `ranking.ts`: `rankRecords(records, spec, { admit })` → per-record `RankingInfo`
+  (eligibility with reason, per-objective value and normalised score, weighted score with
+  normalised weights, Pareto front by iterative peeling, dominated-by count, position), the
+  ordered list, the first front, per-objective summaries (range, best candidate) and notes.
+  Tests: single dominant candidate, front peeling, genuine two-member front ordered by weights,
+  target direction, exclusion of missing values and non-admitted verdicts. Web: the candidates
+  panel computes the ranking from the run and the live specification (weights can be changed
+  without re-running), adds the rank column (front badge, score bar, position), the order switch
+  and the trade-off block with a two-objective scatter (`XyChart` gained unlabelled points).
+- Phase 3E. `comparison.ts`: `buildComparison(records, spec)` → columns (name, SMILES, verdict,
+  origin, front, position) and rows (hard constraints with per-candidate verdict and value,
+  required substructures, then every catalogue property present in any profile, grouped by
+  domain; "best" only where a soft preference gives a direction) and `comparisonToCsv`. Web:
+  `ui/design/ComparisonPanel.tsx` (2D depictions through the engine, an embedded read-only
+  `Viewport` per candidate, sticky property column, CSV download); the candidates table gains
+  selection checkboxes (max 6), "Compare selected" and "Compare the front".
+- Phase 3F. `DesignRun` gains `seedMolecule`, `repeatOf` and `history`; `validateCandidates`
+  accepts the structures already in a run for duplicate detection; `manualCandidate`,
+  `appendCandidates` (validate + evaluate extra candidates against the run's snapshot, merge,
+  re-summarise, history entry) and `reevaluateRun` (re-apply a changed specification to the
+  existing profiles, flagging changed structural rules), `specificationChanged`. Web:
+  `useDesignRun` keeps every run of the session (`runs`, `select`, `repeat`, `importText`,
+  `addManual`, `reevaluate`); `App.openCandidate` tags the opened copy with the candidate and
+  run ids; the design view shows the lineage, "Add to run" and the stale-specification notice
+  with "Re-evaluate"; the candidates panel lists the session's runs (view / repeat), imports run
+  files and prints the run's history.
+
 ## 5. Dependencies
 
 | Dependency                | Version    | Role                                   | Maintenance check (2026-09)                        |
@@ -443,15 +519,22 @@ surface minimal.
 | 9     | Playwright end-to-end suite (editor, chemistry, import/export, assistant/retro, visual smoke) + GitHub Actions CI | done |
 | 10    | PWA (manifest, service worker, icons), Tauri 2 desktop scaffold with Windows NSIS/MSI targets, packaging guide | done (desktop build not compiled here) |
 | 11    | Phase behaviour (Lee–Kesler, Watson, P–T diagram, vacuum boiling point), solvent selection (Hansen parameters, CHEM21 classes, greener substitutes), binary mixtures with original-UNIFAC activity coefficients (distillation with predicted and literature azeotropes, cooling crystallisation) | done |
+| 12 (3A) | Design engine data model: property catalogue with provenance, specification (hard/soft/structural), validation, evaluation, files; specification builder and live check | done |
+| 12 (3B) | Candidate generators (derivatives by fragment substitution, library screen) with provenance, staged validation with reasons, design runs with export, margin-aware evaluation | done |
+| 12 (3C) | Property evaluation through the engines and models with a canonical-SMILES cache, hard-constraint filtering with per-requirement reasons, filters and property columns | done |
+| 12 (3D) | Multi-objective ranking: per-objective scores, Pareto fronts, weighted order, trade-off summary and scatter | done |
+| 12 (3E) | Side-by-side comparison with 2D/3D structures, verdicts, all properties with provenance, best-in-row by preference, CSV export | done |
+| 12 (3F) | Iteration (edited candidates back into the run with lineage, re-evaluation on a changed specification) and reproducibility (session run history, exact repeat, run files) | done |
 
 ## 8. Test inventory
 
 | Suite                                   | Count | What it covers                                                        |
 | --------------------------------------- | ----- | --------------------------------------------------------------------- |
-| `packages/molecule-model` (vitest)      | 143   | periodic table, pure edit ops, conformers, validation rules, formula/weight, implicit H, JSON round trips and malformed input, vector maths, atom placement, MOL V2000 read/write, SDF and format detection, sketch clean-up (methane, ring closure, aromatic planarity, twisted double bond, 2D lifting, fixed atoms), perception (rings, cycles, functional groups), id-collision regression, transforms (mirror handedness, bond rotation dihedral, centre inversion), Joback group assignment and estimates (published acetone example, explicit vs implicit H, ring/aromatic and multi-atom groups, CH2 increment, refusal for uncovered atoms), Girolami density, Lee–Kesler acentric factor and vapour pressure against measured hexane/benzene, Watson ΔHvap, boiling point under vacuum, phase-diagram boundaries and classification, Hansen group assignment against Hansen's solvent values, symmetry rule, refusals, solvent ranking and greener substitutes, Raoult bubble points/T–x–y/Fenske/verdicts, UNIFAC activity coefficients against textbook examples and the thermo fixture, UNIFAC azeotrope and solubility, ideal solubility and crystallisation recovery |
+| `packages/molecule-model` (vitest)      | 144   | periodic table, pure edit ops, conformers, validation rules, formula/weight, implicit H, JSON round trips and malformed input, vector maths, atom placement, MOL V2000 read/write, SDF and format detection, sketch clean-up (methane, ring closure, aromatic planarity, twisted double bond, 2D lifting, fixed atoms), perception (rings, cycles, functional groups), id-collision regression, transforms (mirror handedness, bond rotation dihedral, centre inversion), Joback group assignment and estimates (published acetone example, explicit vs implicit H, ring/aromatic and multi-atom groups, CH2 increment, refusal for uncovered atoms), Girolami density, Lee–Kesler acentric factor and vapour pressure against measured hexane/benzene, Watson ΔHvap, boiling point under vacuum, phase-diagram boundaries and classification, Hansen group assignment against Hansen's solvent values, symmetry rule, refusals, solvent ranking and greener substitutes, Raoult bubble points/T–x–y/Fenske/verdicts, UNIFAC activity coefficients against textbook examples and the thermo fixture, UNIFAC azeotrope and solubility, ideal solubility and crystallisation recovery |
+| `packages/design-engine` (vitest)       | 21    | property catalogue integrity, specification validation (bounds, categories, weights, elements, SMARTS), requirement wording, constraint and structural evaluation with provenance, overall verdicts, specification file round trip and rejection, derivative generator (determinism, provenance, limits, element scope), library generator, staged validation with a fake engine (structural, duplicate, substructure, unparsable pattern), run files, margin-aware borderline evaluation, evaluation stage with a fake evaluator (one profile per structure, cache hits, verdicts and reasons, filters, evaluator errors kept as undecided), ranking (Pareto fronts, weights, targets, exclusions), comparison matrix and CSV, iteration (manual candidate with lineage, duplicate rejection, re-evaluation without recomputation) |
 | `packages/chem-core` (pytest)           | 12    | schema round trip, RDKit bridge round trip, aromatic handling, engine validation, computed properties, samples validity |
-| `apps/web` (vitest)                     | 72    | scene builder ↔ graph synchronisation, picking, selection, measurements, editor commands, undo/redo history, RDKit WASM engine (real wasm in node) incl. SMILES round trip, remote engine with a fake server, analysis report + rule suggestions, suggestion validation/application (incl. injected operations), template and remote explainers, mock retrosynthesis and provenance policy, fragment library validity and attachment, stereo via real RDKit WASM (mirror flips all labels, single-centre inversion, E/Z flip, unassigned centre), ESOL breakdown and composite predictions (Joback/Girolami/acid-base client-side, QED server-side, water refused by Joback), rule sets, assistant estimates/observations/question answering, question forwarding to the server explainer, synthesis planner with real RDKit WASM (one-step ester, multi-step routes, aromatic and coupling templates, screener, precursor validity for every template, step balance/atom economy/depictions), workspace file round trip and pristine-tab logic, UNIFAC fragmentation on real RDKit WASM against the thermo fixture (72 molecules) and the 3D samples |
-| `tests/e2e` (Playwright)                | 20    | built page in Chromium: open-ended building with ring closure and undo/redo, drag, RDKit properties and valence errors, SMILES/MOL/SDF/JSON import-export round trip, blocked invalid import, assistant suggestions/explanations, mock retro with reaction notes, visual smoke (pixel statistics + screenshot attachment), display styles and hidden hydrogens, stereo labels with mirror, building a new compound from fragments with estimates, property breakdowns with reasoning, assistant Q&A and the aspirin synthesis plan, fragment search and attach-from-SMILES, reaction schemes with depictions and balanced equations, precursor tabs, workspace export, phase tab (vacuum boiling point, conditions, diagram), materials tab (Hansen, solvent ranking, DCM replacement, assistant answers), refusal for uncovered structures, mixtures (azeotrope warning, verdicts, measured Tb override, crystallisation recovery) |
+| `apps/web` (vitest)                     | 76    | scene builder ↔ graph synchronisation, picking, selection, measurements, editor commands, undo/redo history, RDKit WASM engine (real wasm in node) incl. SMILES round trip, remote engine with a fake server, analysis report + rule suggestions, suggestion validation/application (incl. injected operations), template and remote explainers, mock retrosynthesis and provenance policy, fragment library validity and attachment, stereo via real RDKit WASM (mirror flips all labels, single-centre inversion, E/Z flip, unassigned centre), ESOL breakdown and composite predictions (Joback/Girolami/acid-base client-side, QED server-side, water refused by Joback), rule sets, assistant estimates/observations/question answering, question forwarding to the server explainer, synthesis planner with real RDKit WASM (one-step ester, multi-step routes, aromatic and coupling templates, screener, precursor validity for every template, step balance/atom economy/depictions), workspace file round trip and pristine-tab logic, UNIFAC fragmentation on real RDKit WASM against the thermo fixture (72 molecules) and the 3D samples, structure tools (substructure, canonical SMILES) and candidate validation on real WASM, profile adapter, candidate evaluator on real WASM |
+| `tests/e2e` (Playwright)                | 22    | built page in Chromium: open-ended building with ring closure and undo/redo, drag, RDKit properties and valence errors, SMILES/MOL/SDF/JSON import-export round trip, blocked invalid import, assistant suggestions/explanations, mock retro with reaction notes, visual smoke (pixel statistics + screenshot attachment), display styles and hidden hydrogens, stereo labels with mirror, building a new compound from fragments with estimates, property breakdowns with reasoning, assistant Q&A and the aspirin synthesis plan, fragment search and attach-from-SMILES, reaction schemes with depictions and balanced equations, precursor tabs, workspace export, phase tab (vacuum boiling point, conditions, diagram), materials tab (Hansen, solvent ranking, DCM replacement, assistant answers), refusal for uncovered structures, mixtures (azeotrope warning, verdicts, measured Tb override, crystallisation recovery), design workspace (specification builder, validation, live check, persistence, export; derivative generation with staged validation and evaluation, verdict filters, per-requirement checks, property columns, ranking with Pareto front and trade-off scatter, comparison of the front and of ticked candidates with depictions, 3D viewports and CSV export, opening a candidate in a tab, editing it and adding it back with lineage, re-evaluation on a changed specification, repeating a run, borderline verdict) |
 | `services/api` (pytest)                 | 14    | health, validation errors with atom ids, computed properties, 409 on unsanitisable input, 422 on bad schema, optimisation, SMILES round trip with stereo, garbage SMILES, AI endpoint disabled by default and with a fake provider (with and without a question), stereo and estimates, SVG depiction |
 
 End-to-end checks of the built page (tap to add, attach, bond, undo/redo, inspector edits, delete,

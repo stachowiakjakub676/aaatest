@@ -9,12 +9,15 @@ test("phase tab: vacuum boiling point, conditions and the P–T diagram", async 
   await page.click("#tab-phase");
   await expect(page.locator("#phase")).toContainText("Acentric factor");
   await expect(page.locator("#phase")).toContainText("Triple point");
+  // Ethanol is a tabulated solvent: once the engine reports its canonical SMILES, the measured
+  // boiling point (78.4 °C) replaces the Joback estimate (64.4 °C). Wait for that so the numbers below are deterministic.
+  await expect(page.locator("#phase")).toContainText("78.4 °C (measured: recognised as Ethanol)", { timeout: 30_000 });
   // Default preset is the rotary evaporator (20 mbar): far below the normal boiling point.
   const vac = celsius(await page.locator("#vac-result").innerText());
   expect(vac).toBeLessThan(30);
   await page.getByRole("button", { name: "1 atm" }).click();
   const atm = celsius(await page.locator("#vac-result").innerText());
-  expect(atm).toBeCloseTo(64.4, 0); // the Joback Tb of ethanol (337.5 K)
+  expect(atm).toBeCloseTo(78.4, 0); // the vapour curve is anchored at the measured boiling point
   expect(atm - vac).toBeGreaterThan(40);
   await page.fill("#vac-pressure", "0");
   await expect(page.locator("#vac-result")).toContainText("enter a pressure");
