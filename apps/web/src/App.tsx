@@ -733,7 +733,7 @@ export function App() {
         )}
         {tab === "phase" && (
           <div className="panel-content">
-            <PhasePanel molecule={molecule} molarMass={chemistry.state.properties?.molecularWeight} />
+            <PhasePanel molecule={molecule} molarMass={chemistry.state.properties?.molecularWeight} engine={engine} canonicalSmiles={chemistry.state.properties?.canonicalSmiles ?? null} />
           </div>
         )}
         {tab === "materials" && (

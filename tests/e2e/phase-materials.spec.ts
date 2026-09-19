@@ -28,8 +28,8 @@ test("phase tab: vacuum boiling point, conditions and the P–T diagram", async 
   await expect(page.locator("#cond-phase")).toHaveText("gas");
   await page.fill("#cond-temperature", "-200");
   await expect(page.locator("#cond-phase")).toHaveText("solid");
-  await expect(page.locator(".phase-diagram svg path.series")).toHaveCount(3);
-  await expect(page.locator(".phase-diagram .legend")).toContainText("liquid–vapour");
+  await expect(page.locator("#conditions .phase-diagram svg path.series")).toHaveCount(3);
+  await expect(page.locator("#conditions .phase-diagram .legend")).toContainText("liquid–vapour");
   // The chemistry tab carries the same numbers as predictions with reasoning.
   await page.click("#tab-chemistry");
   await expect(page.locator("#estimates")).toContainText("Boiling point at 20 mbar", { timeout: 30_000 });
@@ -79,5 +79,42 @@ test("phase and materials refuse structures outside their group tables", async (
   await expect(page.locator("#hansen")).toContainText("refuses rather than guess");
   await expect(page.locator("#solvent-match")).toHaveCount(0);
   await expect(page.locator("#greener")).toBeVisible(); // the replacement tool does not need the molecule
+  expect(errors.list).toEqual([]);
+});
+
+test("mixtures: ideal distillation with a literature azeotrope warning, and cooling crystallisation", async ({ page }) => {
+  const errors = await openApp(page);
+  await page.selectOption("#sample-select", "ethanol");
+  await page.click("#tab-chemistry");
+  await expect(page.locator(".property-sheet")).toBeVisible({ timeout: 30_000 }); // canonical SMILES known
+  await page.click("#tab-phase");
+  // Ethanol + water: the ideal T–x–y is drawn, but the literature azeotrope is flagged.
+  await page.selectOption("#mix-solvent", "water");
+  await expect(page.locator("#dist-light")).toContainText("Ethanol", { timeout: 20_000 });
+  await expect(page.locator("#azeotrope")).toContainText("78.2 °C");
+  await expect(page.locator("#distillation .xy-chart path.series")).toHaveCount(2);
+  // Ethanol + toluene: no azeotrope in the table for the drawn direction? (there is: 76.7 °C) → warning again
+  await page.selectOption("#mix-solvent", "toluene");
+  await expect(page.locator("#azeotrope")).toContainText("76.7 °C", { timeout: 20_000 });
+  // Ethanol + heptane… skip; ethanol + DMSO: far apart, easy, no literature azeotrope → Hansen text instead.
+  await page.selectOption("#mix-solvent", "dmf");
+  await expect(page.locator("#dist-verdict")).toHaveText("easy", { timeout: 20_000 });
+  await expect(page.locator("#nonideality")).toContainText("Hansen distance");
+  // A measured boiling point re-anchors the vapour curve.
+  await page.locator("#phase summary").click();
+  await page.fill("#meas-tb", "78.4");
+  await expect(page.locator("#phase")).toContainText("78.4 °C (measured)");
+  await expect(page.locator("#dist-light")).toContainText("78.4 °C");
+
+  // Crystallisation of a solid: aspirin from ethanol, 60 → 0 °C.
+  await page.selectOption("#sample-select", "aspirin");
+  await page.click("#tab-phase");
+  await page.selectOption("#mix-solvent", "ethanol");
+  await expect(page.locator("#cryst-hot-s")).toContainText("g / 100 g solvent", { timeout: 20_000 });
+  const recovery = Number(/(\d+) %/.exec(await page.locator("#cryst-recovery").innerText())?.[1]);
+  expect(recovery).toBeGreaterThan(50);
+  await expect(page.locator("#crystallisation .xy-chart path.series")).toHaveCount(1);
+  await page.fill("#cryst-cold", "80");
+  await expect(page.locator("#crystallisation")).toContainText("must be below the hot one");
   expect(errors.list).toEqual([]);
 });

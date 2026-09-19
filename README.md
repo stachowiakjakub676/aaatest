@@ -196,6 +196,18 @@ them against a solvent table with greenness classes.
   2-MeTHF for dichloromethane). Both are rankings by cohesion-energy similarity, not guarantees of
   equal performance, and the classes are transcribed from the guide: check the source and the
   safety data sheet before acting on one.
+- **Mixtures (Phase tab, below the diagram).** Pick a solvent from the table as the second
+  component. *Distillation*: Raoult's-law T–x–y diagram from the two Lee–Kesler vapour curves,
+  boiling-point gap, relative volatility, Fenske minimum stages, a verdict (easy / normal / hard /
+  impractical), and either the literature azeotrope when the drawn molecule and the solvent are a
+  tabulated pair (ethanol–water 78.2 °C, …) or a qualitative deviation-from-ideality note from the
+  Hansen distance. *Cooling crystallisation*: ideal solubility (Schröder–van Laar) from Tm and
+  ΔHfus, solubility in g per 100 g solvent at the hot and cold temperatures, recovery fraction,
+  solvent needed per gram, the solubility curve, and a Hansen-based caution on how far below the
+  ideal value the real solubility may lie. The solvent's constants are estimated by the same
+  methods on its own structure and anchored at its measured boiling point and Hansen parameters
+  (water uses measured constants). A *Measured values* box lets you replace the estimated Tb, Tm
+  and ΔHfus of the drawn molecule with data-sheet values; everything downstream uses them.
 - Both tabs refuse structures their group tables do not cover (hetero-aromatic and fused rings,
   alkynes, sulfur groups, iodine…) instead of guessing, and the Chemistry tab and the assistant
   carry the same numbers (vapour pressure at 25 °C, boiling point at 20 mbar, ΔHvap at 25 °C,

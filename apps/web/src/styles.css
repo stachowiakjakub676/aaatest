@@ -1494,3 +1494,11 @@ kbd {
   border-color: var(--err);
   color: #fff;
 }
+
+.warn-text {
+  color: var(--warn);
+}
+.custom-element .field {
+  flex: 1 1 0;
+  min-width: 0;
+}
