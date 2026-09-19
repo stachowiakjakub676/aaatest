@@ -6,9 +6,12 @@
  * No value is invented here: what the tools do not supply stays unknown.
  */
 import type { Molecule } from "@molecular-cad/molecule-model";
+import type { Candidate } from "./candidates";
 import { evaluateSpecification } from "./evaluation";
 import type { CandidateProfile, CheckStatus, EvaluationOptions } from "./evaluation";
-import type { CandidateRecord, DesignRun } from "./run";
+import { summariseRun, validateCandidates } from "./run";
+import type { CandidateRecord, DesignRun, StructureTools } from "./run";
+import type { Specification } from "./specification";
 
 export interface CandidateEvaluator {
   /** Models and tables the evaluator uses (recorded in the run's provenance). */
@@ -107,4 +110,42 @@ export function verdictReason(r: CandidateRecord): string | null {
   const all = [...ev.constraints.map((c) => ({ status: c.status, text: `${c.requirement} — ${c.reason}` })), ...ev.structural.map((s) => ({ status: s.status, text: `${s.rule} — ${s.reason}` }))];
   const pick = (s: CheckStatus) => all.find((x) => x.status === s)?.text ?? null;
   return pick("fail") ?? pick("borderline") ?? pick("unknown");
+}
+
+function summariseEvaluation(records: CandidateRecord[], cacheHits: number): EvaluationSummary {
+  const count = (s: CheckStatus) => records.filter((r) => r.evaluation?.overall === s).length;
+  return { evaluated: records.filter((r) => r.status === "valid").length, passed: count("pass"), borderline: count("borderline"), failed: count("fail"), undecided: count("unknown"), cacheHits };
+}
+
+/**
+ * Iteration: validate and evaluate extra candidates (e.g. edited by hand) against the run's own
+ * specification snapshot and append them; duplicates of structures already in the run are rejected.
+ */
+export async function appendCandidates(run: EvaluatedRun, candidates: Candidate[], tools: StructureTools, evaluator: CandidateEvaluator, cache: ProfileCache): Promise<EvaluatedRun> {
+  const seen = new Map<string, string>();
+  for (const r of run.records) if (r.canonicalSmiles && r.status === "valid") seen.set(r.canonicalSmiles, r.candidate.name);
+  const validated = await validateCandidates({ ...run, records: [] }, candidates, tools, undefined, seen);
+  const evaluated = await evaluateRun(validated, evaluator, cache, run.evaluationOptions);
+  const records = [...run.records, ...evaluated.records];
+  const merged = summariseRun({ ...run, records, provenance: evaluated.provenance, history: [...run.history, `${new Date().toISOString()}: added ${candidates.length} candidate(s) by hand (${evaluated.records.filter((r) => r.status === "valid").length} valid)`] });
+  return { ...merged, evaluation: summariseEvaluation(records, run.evaluation.cacheHits + evaluated.evaluation.cacheHits) };
+}
+
+/**
+ * Iteration on the specification: re-apply the hard constraints (and margins) to the existing
+ * profiles without recomputing anything. Structural and substructure rules were checked during
+ * validation against the old specification; if they changed, the run says so and a new run is
+ * the honest answer.
+ */
+export function reevaluateRun(run: EvaluatedRun, spec: Specification, options: EvaluationOptions = {}): EvaluatedRun {
+  const opts: EvaluationOptions = { ...run.evaluationOptions, ...options, substructuresVerified: true };
+  const structuralChanged = JSON.stringify(run.specification.structural) !== JSON.stringify(spec.structural);
+  const records = run.records.map((r) => (r.status === "valid" && r.profile ? { ...r, evaluation: evaluateSpecification(spec, r.profile, r.candidate.molecule, opts) } : r));
+  const note = `${new Date().toISOString()}: re-evaluated against the specification updated at ${spec.updatedAt}${structuralChanged ? " (structural constraints changed: candidates were generated and validated under the previous ones; run again to apply them)" : ""}`;
+  return { ...run, specification: JSON.parse(JSON.stringify(spec)) as Specification, records, history: [...run.history, note], evaluationOptions: opts, evaluation: summariseEvaluation(records, run.evaluation.cacheHits) };
+}
+
+/** True when the specification changed after the run's snapshot was taken. */
+export function specificationChanged(run: DesignRun, spec: Specification): boolean {
+  return run.specification.updatedAt !== spec.updatedAt || JSON.stringify(run.specification) !== JSON.stringify(spec);
 }

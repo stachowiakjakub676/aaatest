@@ -167,3 +167,15 @@ export const GENERATORS: readonly CandidateGenerator[] = [DERIVATIVE_GENERATOR, 
 export function generatorById(id: string): CandidateGenerator | undefined {
   return GENERATORS.find((g) => g.id === id);
 }
+
+/** A candidate made by hand in the editor (iteration: candidate → edit → recalculate). */
+export function manualCandidate(molecule: Molecule, parent: { id: string; name: string } | null, note: string): Candidate {
+  const heavy = molecule.atoms.filter((a) => a.element !== "H").length;
+  const name = molecule.name ?? (parent ? `${parent.name} (edited)` : "edited molecule");
+  return {
+    id: newId("cand"),
+    name,
+    molecule: createMolecule({ ...molecule, name, metadata: { ...molecule.metadata, source: "design-engine:manual" } }),
+    origin: { generator: "manual", strategy: parent ? "edited candidate" : "drawn in the editor", parent, operations: [`${parent ? `edited ${parent.name} in the 3D editor` : "drawn in the 3D editor"}: ${note} (${heavy} heavy atoms, ${molecule.bonds.length} bonds)`] },
+  };
+}

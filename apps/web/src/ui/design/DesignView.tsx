@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { PROPERTY_BY_KEY, describePreference, describeStructural, evaluateSpecification, hasErrors } from "@molecular-cad/design-engine";
+import { PROPERTY_BY_KEY, describePreference, describeStructural, evaluateSpecification, hasErrors, specificationChanged } from "@molecular-cad/design-engine";
 import type { CandidateRecord, CheckStatus, PropertyValue } from "@molecular-cad/design-engine";
 import type { Molecule } from "@molecular-cad/molecule-model";
 import type { ChemistryState } from "../../chemistry/useChemistry";
@@ -53,6 +53,11 @@ export function DesignView({ api, runApi, molecule, chemistry, engine, onOpenEdi
   const result = useMemo(() => evaluateSpecification(spec, profile, hasAtoms ? molecule : null), [spec, profile, molecule, hasAtoms]);
   const structuralLines = describeStructural(spec.structural);
   const broken = hasErrors(issues);
+  const run = runApi.run;
+  const meta = molecule.metadata as Record<string, unknown>;
+  const parent = typeof meta.candidateId === "string" && typeof meta.candidateName === "string" ? { id: meta.candidateId, name: meta.candidateName } : null;
+  const parentInRun = parent && run ? run.records.some((r) => r.candidate.id === parent.id) : false;
+  const stale = run ? specificationChanged(run, spec) : false;
 
   return (
     <section className="design-view" aria-label="Design workspace">
@@ -155,9 +160,33 @@ export function DesignView({ api, runApi, molecule, chemistry, engine, onOpenEdi
                 </>
               )}
               <p className="hint">Hover a row for the reason. A miss smaller than the model's typical error is marked borderline rather than failed. Substructure rules are checked on generated candidates below.</p>
-              <button type="button" className="btn btn-small" id="btn-open-editor" onClick={onOpenEditor}>
-                Back to the editor
-              </button>
+              <div className="button-row">
+                <button type="button" className="btn btn-small" id="btn-open-editor" onClick={onOpenEditor}>
+                  Back to the editor
+                </button>
+                {run && (
+                  <button
+                    type="button"
+                    className="btn btn-small"
+                    id="btn-add-to-run"
+                    disabled={runApi.running || chemistry.computing}
+                    onClick={() => void runApi.addManual(molecule, parentInRun ? parent : null, parentInRun ? `edited from candidate ${parent!.name}` : "drawn or edited in the editor")}
+                    title="Validate and evaluate this molecule against the run's specification and add it to the run as a candidate"
+                  >
+                    Add to run {run.id}
+                  </button>
+                )}
+              </div>
+              {parent && <p className="hint" id="derived-from">{parentInRun ? `Derived from candidate ${parent.name} of the shown run: adding it records that lineage.` : `Derived from candidate ${parent.name} of another run.`}</p>}
+              {stale && (
+                <p className="hint warn-text" id="spec-stale">
+                  The specification changed after run {run!.id} was evaluated.{" "}
+                  <button type="button" className="link-btn" id="btn-reevaluate" onClick={() => runApi.reevaluate(spec)}>
+                    Re-evaluate the run against it
+                  </button>{" "}
+                  (existing profiles, no recomputation; changed structural rules need a new run).
+                </p>
+              )}
             </>
           )}
         </section>

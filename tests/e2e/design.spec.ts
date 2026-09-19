@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { openApp } from "./helpers";
+import { openApp, tapAtom } from "./helpers";
 
 test("design workspace: build a specification, validate it and check the open molecule against it", async ({ page }) => {
   const errors = await openApp(page);
@@ -145,7 +145,40 @@ test("design workspace: generate derivatives of the editor molecule, validate th
   await expect(page.locator(".viewport-area")).toBeVisible();
   await expect(page.locator(".doc-tabs [role=tab]")).toHaveCount(2);
   await expect(page.locator(".doc-tabs [role=tab][aria-selected=true]")).toContainText("Ethanol + Methyl");
-  // A borderline verdict: the seed's predicted boiling point misses a tight range by less than the model error.
+  // Iteration: edit the candidate (add a methyl to the OH oxygen via the fragment tool would change it; here: delete one hydrogen-bearing... keep it simple: change an element) and add it back to the run with its lineage.
+  await page.click("#tool-select");
+  await page.click("#tab-inspect");
+  const labels = page.locator(".atom-label");
+  const texts = await labels.allInnerTexts();
+  const oIndex = texts.findIndex((t) => t.trim() === "O");
+  expect(oIndex).toBeGreaterThanOrEqual(0);
+  await tapAtom(page, oIndex);
+  await expect(page.locator("#inspector-element")).toBeVisible();
+  await page.selectOption("#inspector-element", "S");
+  await page.click("#view-design");
+  await expect(page.locator("#derived-from")).toContainText("Derived from candidate Ethanol + Methyl");
+  await page.click("#btn-add-to-run");
+  await expect(page.locator("#run-history-notes")).toContainText("added 1 candidate(s) by hand", { timeout: 60_000 });
+  await expect(page.locator(".candidate-table")).toContainText("edited Ethanol + Methyl");
+  await expect(page.locator("#run-summary")).toContainText("of 41 generated");
+  await expect(page.locator(".candidate-table")).toContainText("contains S"); // structural scope of the run rejects sulfur
+  // Iteration on the specification: relax the weight bound → stale run → re-evaluate without recomputation.
+  await mwRow.getByLabel("Upper bound").fill("80");
+  await expect(page.locator("#spec-stale")).toBeVisible();
+  await page.click("#btn-reevaluate");
+  await expect(page.locator("#spec-stale")).toHaveCount(0);
+  await expect(page.locator("#run-history-notes")).toContainText("re-evaluated against the specification");
+  await expect(page.locator("#run-summary")).toContainText(/[1-9]\d* pass/);
+  await expect(page.locator("#run-summary")).toContainText("0 fail");
+  // Reproducibility: repeat the run from its stored specification, generator, parameters and seed.
+  await page.locator("#run-history summary").click();
+  await page.locator("#run-history .btn-repeat").first().click();
+  await expect(page.locator("#run-history")).toContainText("Runs in this session (2)", { timeout: 90_000 });
+  await expect(page.locator("#run-history")).toContainText("repeat of run-");
+  await expect(page.locator("#run-summary")).toContainText("of 40 generated");
+  // A borderline verdict: back on the seed (first tab), its predicted boiling point misses a tight range by less than the model error.
+  await page.click("#view-editor");
+  await page.locator(".doc-tabs [role=tab]").first().click();
   await page.click("#view-design");
   await page.click("#btn-add-constraint");
   const row = page.locator(".constraint-row").nth(1);

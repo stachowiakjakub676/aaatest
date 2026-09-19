@@ -1756,3 +1756,10 @@ textarea.input {
   height: auto;
   display: block;
 }
+
+.run-table tr.run-current td {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.reasoning.small {
+  font-size: 11px;
+}

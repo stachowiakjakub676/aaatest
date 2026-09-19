@@ -122,14 +122,16 @@ export function App() {
   const openCandidate = useCallback(
     (r: CandidateRecord) => {
       const tidy = cleanupGeometry(r.candidate.molecule, { maxIterations: TIDY_ITERATIONS }).molecule;
-      const doc: Doc = { id: newDocId(), history: createHistory({ ...tidy, name: r.candidate.name }, `Opened candidate ${r.candidate.name}`) };
+      // Tag the copy so an edited version can be added back to the run with its parent.
+      const tagged = { ...tidy, name: r.candidate.name, metadata: { ...tidy.metadata, source: "design-engine:candidate", candidateId: r.candidate.id, candidateName: r.candidate.name, runId: designRun.run?.id ?? "" } };
+      const doc: Doc = { id: newDocId(), history: createHistory(tagged, `Opened candidate ${r.candidate.name}`) };
       setWorkspace((w) => ({ docs: [...w.docs, doc], activeId: doc.id }));
       setSelection(EMPTY_SELECTION);
       setPendingAtomId(null);
       setMode("select");
       setView("editor");
     },
-    [],
+    [designRun.run?.id],
   );
   // Phase 7: assistant state. Phase 8: retrosynthesis state.
   const [explainer, setExplainer] = useState<ExplainerChoice>("template");

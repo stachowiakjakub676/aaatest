@@ -43,11 +43,17 @@ export interface DesignRun {
   specification: Specification;
   generator: { id: string; label: string; params: GeneratorParams };
   seed: { id: string; name: string; atoms: number } | null;
+  /** The seed molecule itself, so the run can be repeated exactly. */
+  seedMolecule: Molecule | null;
+  /** Id of the run this one repeats, if any. */
+  repeatOf: string | null;
   provenance: RunProvenance;
   records: CandidateRecord[];
   summary: { generated: number; rejected: number; valid: number };
   /** Rejections by stage, for the report. */
   rejectionsByStage: Record<RejectionStage, number>;
+  /** Events after the run finished: manual additions, re-evaluations (with timestamps). */
+  history: string[];
 }
 
 /** What the validation stage needs from the chemistry engine. */
@@ -59,7 +65,7 @@ export interface StructureTools {
   hasSubstructure(mol: Molecule, smarts: string): Promise<boolean | null>;
 }
 
-export function createRun(spec: Specification, generator: { id: string; label: string }, params: GeneratorParams, seed: Molecule | null, provenance: RunProvenance): DesignRun {
+export function createRun(spec: Specification, generator: { id: string; label: string }, params: GeneratorParams, seed: Molecule | null, provenance: RunProvenance, repeatOf: string | null = null): DesignRun {
   return {
     id: newId("run"),
     createdAt: new Date().toISOString(),
@@ -67,14 +73,18 @@ export function createRun(spec: Specification, generator: { id: string; label: s
     specification: JSON.parse(JSON.stringify(spec)) as Specification,
     generator: { id: generator.id, label: generator.label, params: { ...params } },
     seed: seed && seed.atoms.length ? { id: seed.id, name: seed.name ?? seed.id, atoms: seed.atoms.length } : null,
+    seedMolecule: seed && seed.atoms.length ? seed : null,
+    repeatOf,
     provenance,
     records: [],
     summary: { generated: 0, rejected: 0, valid: 0 },
     rejectionsByStage: { structural: 0, graph: 0, engine: 0, duplicate: 0, substructure: 0 },
+    history: [],
   };
 }
 
-function summarise(run: DesignRun): DesignRun {
+/** Recompute the counts from the records. */
+export function summariseRun<T extends DesignRun>(run: T): T {
   const summary = { generated: run.records.length, rejected: run.records.filter((r) => r.status === "rejected").length, valid: run.records.filter((r) => r.status === "valid").length };
   const rejectionsByStage: DesignRun["rejectionsByStage"] = { structural: 0, graph: 0, engine: 0, duplicate: 0, substructure: 0 };
   for (const r of run.records) if (r.rejection) rejectionsByStage[r.rejection.stage] += 1;
@@ -86,9 +96,8 @@ function summarise(run: DesignRun): DesignRun {
  * sanitisation → duplicates by canonical SMILES → required/forbidden substructures.
  * Every rejection keeps its stage and reason; nothing invalid reaches the next stage.
  */
-export async function validateCandidates(run: DesignRun, candidates: Candidate[], tools: StructureTools, onProgress?: (done: number, total: number) => void): Promise<DesignRun> {
+export async function validateCandidates(run: DesignRun, candidates: Candidate[], tools: StructureTools, onProgress?: (done: number, total: number) => void, seen: Map<string, string> = new Map()): Promise<DesignRun> {
   const records: CandidateRecord[] = [];
-  const seen = new Map<string, string>();
   const st = run.specification.structural;
   let done = 0;
   for (const c of candidates) {
@@ -159,7 +168,7 @@ export async function validateCandidates(run: DesignRun, candidates: Candidate[]
     records.push({ candidate: c, status: "valid", canonicalSmiles: smiles });
     onProgress?.(done, candidates.length);
   }
-  return summarise({ ...run, records, finishedAt: new Date().toISOString() });
+  return summariseRun({ ...run, records, finishedAt: new Date().toISOString() });
 }
 
 export const DESIGN_RUN_KIND = "clapeyron-design-run";
@@ -178,5 +187,6 @@ export function parseRun(text: string): DesignRun | null {
   }
   if (!raw || typeof raw !== "object" || (raw as { kind?: unknown }).kind !== DESIGN_RUN_KIND) return null;
   const run = (raw as { run?: unknown }).run as DesignRun | undefined;
-  return run && typeof run === "object" && Array.isArray(run.records) ? run : null;
+  if (!run || typeof run !== "object" || !Array.isArray(run.records)) return null;
+  return { ...run, seedMolecule: run.seedMolecule ?? null, repeatOf: run.repeatOf ?? null, history: Array.isArray(run.history) ? run.history : [] };
 }

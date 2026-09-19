@@ -279,6 +279,19 @@ generation, filtering, ranking and comparison follow in phases 3B–3F on the sa
   of them has a value for, grouped by domain, each tagged computed or predicted with the method
   and error on hover. A cell is highlighted as best in its row only where a soft preference says
   which direction is better. The matrix exports as CSV; any column opens in the editor.
+- **Iteration and reproducibility (phase 3F).** A candidate opened in the editor carries its
+  lineage; after editing it, *Add to run* validates and evaluates the edited molecule against
+  the run's specification and appends it as a candidate whose origin says "edited candidate X in
+  the 3D editor" (duplicates of the run are rejected as such). When the specification changes
+  after a run, the workspace says so and *Re-evaluate* re-applies the hard constraints to the
+  existing profiles without recomputing anything (changed structural rules are called out: they
+  need a new run). Every run of the session is listed with its counts and can be viewed again or
+  **repeated** exactly from its stored specification snapshot, generator, parameters and seed
+  molecule (the repeat records which run it reproduces); runs import and export as
+  `kind: "clapeyron-design-run"` files, which hold the specification snapshot, generator,
+  parameters, seed, engine and model versions, timestamps, every candidate with its origin,
+  status and reasons, profiles and verdicts, and a history of later additions and
+  re-evaluations.
 - **Margins.** Predicted properties carry a typical error (13 K for the Joback boiling point,
   1 log unit for ESOL, …). A miss smaller than that error is reported as *borderline*, not as a
   fail, so a candidate is never rejected on a difference the model cannot resolve; the builder

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FRAGMENTS, getSampleMolecule, molecularFormula, molecularWeight } from "@molecular-cad/molecule-model";
 import type { Molecule } from "@molecular-cad/molecule-model";
-import { DERIVATIVE_GENERATOR, createRun, createSpecification, evaluateRun, filterRecords, validateCandidates, verdictReason } from "../src";
+import { DERIVATIVE_GENERATOR, appendCandidates, createRun, createSpecification, evaluateRun, filterRecords, manualCandidate, reevaluateRun, specificationChanged, touch, validateCandidates, verdictReason } from "../src";
 import type { CandidateEvaluator, CandidateProfile, ProfileCache, Specification, StructureTools } from "../src";
 
 const ethanol = getSampleMolecule("ethanol")!;
@@ -66,5 +66,40 @@ describe("evaluation stage", () => {
     expect(r.evaluation!.overall).toBe("unknown");
     expect(run.evaluation.undecided).toBe(1);
     expect(verdictReason(r)).toMatch(/no computed value available/);
+  });
+});
+
+describe("iteration", () => {
+  it("appends a hand-edited candidate with its parent, rejecting duplicates of the run, and re-evaluates on a changed specification", async () => {
+    const spec: Specification = { ...createSpecification("s"), hard: [{ id: "h1", property: "mw", op: "<=", max: 62 }] };
+    const cands = await DERIVATIVE_GENERATOR.generate({ spec, seed: ethanol, limit: 6, fragments: FRAGMENTS, libraries: [], parseSmiles: async () => null }, { ...DERIVATIVE_GENERATOR.defaults, categories: "alkyl" });
+    const ev = fakeEvaluator();
+    const cache: ProfileCache = new Map();
+    const run = await evaluateRun(await validateCandidates(createRun(spec, DERIVATIVE_GENERATOR, {}, ethanol, { app: "t", engine: "fake", models: [] }), cands, tools), ev, cache);
+    expect(run.seedMolecule).toBe(ethanol);
+    const parent = run.records.find((r) => r.status === "valid")!;
+    // "Editing" the parent into ethanol itself: a new structure for this run (the seed was never a candidate).
+    const edited = manualCandidate({ ...ethanol, name: "my edit" }, { id: parent.candidate.id, name: parent.candidate.name }, "removed the methyl");
+    expect(edited.origin.generator).toBe("manual");
+    expect(edited.origin.parent?.id).toBe(parent.candidate.id);
+    const more = await appendCandidates(run, [edited, manualCandidate(parent.candidate.molecule, null, "same as an existing candidate")], tools, ev, cache);
+    expect(more.records).toHaveLength(run.records.length + 2);
+    expect(more.summary.generated).toBe(run.summary.generated + 2);
+    const added = more.records.find((r) => r.candidate.name === "my edit")!;
+    expect(added.status).toBe("valid");
+    expect(added.evaluation!.overall).toBe("pass"); // ethanol 46 ≤ 62
+    const dup = more.records[more.records.length - 1]!;
+    expect(dup.rejection?.stage).toBe("duplicate");
+    expect(more.history[0]).toMatch(/added 2 candidate\(s\) by hand \(1 valid\)/);
+    expect(more.evaluation.evaluated).toBe(run.evaluation.evaluated + 1);
+    // Tighten the constraint: no new computation, verdicts change, structural change is called out.
+    const tighter: Specification = touch({ ...spec, hard: [{ id: "h1", property: "mw", op: "<=", max: 50 }], structural: { ...spec.structural, maxHeavyAtoms: 3 } });
+    expect(specificationChanged(more, tighter)).toBe(true);
+    expect(specificationChanged(more, more.specification)).toBe(false);
+    const re = reevaluateRun(more, tighter);
+    expect(re.evaluation.passed).toBe(1); // only the 46 g/mol edit
+    expect(re.records.find((r) => r.candidate.name === "my edit")!.evaluation!.overall).toBe("pass");
+    expect(re.history[re.history.length - 1]).toMatch(/structural constraints changed/);
+    expect(ev.calls).toBe(run.evaluation.evaluated + 1); // no profile recomputed
   });
 });

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { GENERATORS, PROPERTY_BY_KEY, filterRecords, hasErrors, rankRecords, serializeRun, verdictReason } from "@molecular-cad/design-engine";
 import type { CandidateFilter, CandidateRecord, CheckStatus, GeneratorParams, RankedRecord, Specification, SpecificationIssue } from "@molecular-cad/design-engine";
 import type { Molecule } from "@molecular-cad/molecule-model";
@@ -64,6 +64,8 @@ export function CandidatesPanel({ api, spec, issues, seed, engine, onOpenCandida
   const seedEmpty = seed.atoms.length === 0;
   const needsSeed = generatorId === "derivatives";
   const run = api.run;
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const ranking = useMemo(() => (run ? rankRecords(run.records, spec) : null), [run, spec]);
   const ranked: RankedRecord[] = ranking ? ranking.records : [];
   const shown = useMemo(() => {
@@ -125,6 +127,66 @@ export function CandidatesPanel({ api, spec, issues, seed, engine, onOpenCandida
           </button>
         )}
       </div>
+      {api.runs.length > 0 && (
+        <details className="prediction-details" id="run-history" open={api.runs.length > 1}>
+          <summary>Runs in this session ({api.runs.length})</summary>
+          <table className="solvent-table run-table">
+            <thead>
+              <tr>
+                <th>run</th>
+                <th>when</th>
+                <th>generator · seed</th>
+                <th className="mono">pass / valid / generated</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {api.runs.map((r) => (
+                <tr key={r.id} className={r.id === run?.id ? "run-current" : ""}>
+                  <td className="mono">
+                    {r.id}
+                    {r.repeatOf ? <div className="muted small">repeat of {r.repeatOf}</div> : null}
+                  </td>
+                  <td className="mono small">{r.createdAt.replace("T", " ").slice(0, 19)}</td>
+                  <td className="small">
+                    {r.generator.label}
+                    {r.seed ? ` · ${r.seed.name}` : ""}
+                  </td>
+                  <td className="mono">
+                    {r.evaluation.passed} / {r.summary.valid} / {r.summary.generated}
+                  </td>
+                  <td>
+                    <button type="button" className="btn btn-small" onClick={() => api.select(r.id)} disabled={r.id === run?.id}>
+                      View
+                    </button>{" "}
+                    <button type="button" className="btn btn-small btn-repeat" onClick={() => void api.repeat(r)} disabled={api.running || (r.generator.id === "derivatives" && !r.seedMolecule)} title="Run again with the same specification snapshot, generator, parameters and seed">
+                      Repeat
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      )}
+      <div className="button-row">
+        <button type="button" className="btn btn-small" id="btn-run-import" onClick={() => fileRef.current?.click()} title="Open a .clapeyron-run.json file">
+          Import run
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".json,application/json"
+          hidden
+          onChange={async (e) => {
+            const f = e.target.files?.[0];
+            if (!f) return;
+            setImportError(api.importText(await f.text()));
+            e.target.value = "";
+          }}
+        />
+        {importError && <span className="hint error-text">{importError}</span>}
+      </div>
       {api.progress && (
         <p className="hint" id="gen-progress">
           {api.progress.stage === "generating" ? "Generating" : api.progress.stage === "validating" ? "Validating" : "Evaluating properties"} {api.progress.done} / {api.progress.total || "…"}
@@ -144,6 +206,13 @@ export function CandidatesPanel({ api, spec, issues, seed, engine, onOpenCandida
             {run.seed ? ` on ${run.seed.name} (${run.seed.atoms} atoms)` : ""} · {run.provenance.engine} · {run.createdAt.replace("T", " ").slice(0, 19)} · rejections: {Object.entries(run.rejectionsByStage).filter(([, n]) => n > 0).map(([s, n]) => `${s} ${n}`).join(", ") || "none"} · profiles from cache: {run.evaluation.cacheHits}
           </p>
           <p className="hint" id="run-models">Models: {run.provenance.models.join("; ")}</p>
+          {run.history.length > 0 && (
+            <ul className="reasoning small" id="run-history-notes">
+              {run.history.map((h, i) => (
+                <li key={i}>{h}</li>
+              ))}
+            </ul>
+          )}
           <div className="custom-element">
             <div className="seg" role="radiogroup" aria-label="Show candidates" id="cand-filter">
               {FILTERS.map(([id, label]) => (
