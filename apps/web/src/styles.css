@@ -1661,3 +1661,39 @@ textarea.input {
 .candidate-table tr.check-pass > td:nth-child(3) .status {
   font-weight: 600;
 }
+
+.rank-cell {
+  min-width: 96px;
+}
+.rank-badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+}
+.rank-badge.front {
+  border-color: var(--select);
+  color: var(--select);
+  font-weight: 600;
+}
+.score-bar {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin: 4px 0 2px;
+  overflow: hidden;
+}
+.score-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.tradeoffs {
+  margin: 6px 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}

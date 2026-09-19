@@ -14,6 +14,14 @@ export interface XyMarker {
   cls?: string;
 }
 
+export interface XyPoint {
+  x: number;
+  y: number;
+  /** CSS class: "point" (hollow), "marker" (filled accent), "marker-std" (dashed). */
+  cls?: string;
+  title?: string;
+}
+
 export interface XyChartProps {
   ariaLabel: string;
   xLabel: string;
@@ -22,6 +30,8 @@ export interface XyChartProps {
   yDomain: [number, number];
   series: XySeries[];
   markers?: XyMarker[];
+  /** Unlabelled points (scatter); hover shows the title. */
+  points?: XyPoint[];
   xFormat?: (v: number) => string;
   yFormat?: (v: number) => string;
   /** Text for the hover tooltip; default shows x and y. */
@@ -44,7 +54,7 @@ function niceTicks(lo: number, hi: number, count = 5): number[] {
 }
 
 /** Small linear x–y chart with direct series labels, a legend for two or more series and a crosshair hover. */
-export function XyChart({ ariaLabel, xLabel, yLabel, xDomain, yDomain, series, markers = [], xFormat = (v) => String(v), yFormat = (v) => String(v), hoverText }: XyChartProps) {
+export function XyChart({ ariaLabel, xLabel, yLabel, xDomain, yDomain, series, markers = [], points = [], xFormat = (v) => String(v), yFormat = (v) => String(v), hoverText }: XyChartProps) {
   const [hover, setHover] = useState<[number, number] | null>(null);
   const [x0, x1] = xDomain;
   const [y0, y1] = yDomain;
@@ -99,6 +109,11 @@ export function XyChart({ ariaLabel, xLabel, yLabel, xDomain, yDomain, series, m
             </text>
           );
         })}
+        {points.map((p, i) => (
+          <circle key={`pt${i}`} className={p.cls ?? "point"} cx={x(p.x)} cy={y(p.y)} r={4}>
+            {p.title && <title>{p.title}</title>}
+          </circle>
+        ))}
         {markers.map((m) => (
           <g key={m.label}>
             <circle className={m.cls ?? "marker"} cx={x(m.x)} cy={y(m.y)} r={5} />

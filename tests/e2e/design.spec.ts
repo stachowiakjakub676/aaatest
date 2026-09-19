@@ -85,6 +85,12 @@ test("design workspace: generate derivatives of the editor molecule, validate th
   await mwRow.locator("select.prop").selectOption("mw");
   await mwRow.locator("select.op").selectOption("<=");
   await mwRow.getByLabel("Upper bound").fill("62");
+  // Two soft preferences → a two-objective ranking with a Pareto front.
+  await page.click("#btn-add-preference");
+  await page.click("#btn-add-preference");
+  const pref2 = page.locator("#soft-preferences .constraint-row").nth(1);
+  await pref2.locator("select.prop").selectOption("tb");
+  await pref2.locator("select.op").selectOption("minimize");
   await page.fill("#gen-limit", "40");
   await page.click("#btn-generate");
   await expect(page.locator("#run-summary")).toContainText("valid of 40 generated", { timeout: 90_000 });
@@ -99,6 +105,10 @@ test("design workspace: generate derivatives of the editor molecule, validate th
   await expect(page.locator(".candidate-table th", { hasText: "Molecular weight (g/mol)" })).toBeVisible();
   await expect(page.locator("#candidates")).toContainText("rdkit-wasm");
   await expect(page.locator("#candidates")).toContainText("Joback");
+  await expect(page.locator("#tradeoffs")).toContainText("best candidate");
+  await expect(page.locator("#pareto-front")).toContainText("Pareto front");
+  await expect(page.locator(".candidate-table .rank-badge.front").first()).toBeVisible();
+  await expect(page.locator("#tradeoffs .xy-chart svg circle").first()).toBeVisible();
   await page.locator("#cand-filter").getByRole("radio", { name: "passing", exact: true }).click();
   const passing = await rows.count();
   expect(passing).toBeGreaterThan(0);

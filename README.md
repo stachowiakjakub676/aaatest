@@ -263,7 +263,16 @@ generation, filtering, ranking and comparison follow in phases 3B–3F on the sa
   one column per property the specification mentions (each value tagged computed or predicted,
   method and error on hover) and an expandable list of every requirement with its reason. Filters:
   all, passing, passing or borderline, failing, undecided, rejected. The run records the models
-  used and the cache hits; the order is still the generation order (ranking is phase 3D).
+  used and the cache hits.
+- **Ranking and trade-offs (phase 3D).** The soft preferences are objectives. Each passing or
+  borderline candidate with every preferred property available gets a per-objective satisfaction
+  (0–100 % over the ranked population; higher / lower / close to a target), a **Pareto front**
+  number (★ front: no other candidate is at least as good on every objective and better on one;
+  fronts are peeled layer by layer) and a weighted score from your weights. The table orders by
+  front, then weighted score; a trade-off block lists each objective's range and best candidate,
+  the Pareto front members and, for two objectives, a scatter with the front highlighted.
+  Ineligible candidates say why (failed, missing value, not evaluated). There is no single
+  "best molecule": the front keeps every trade-off visible, the weights only order it.
 - **Margins.** Predicted properties carry a typical error (13 K for the Joback boiling point,
   1 log unit for ESOL, …). A miss smaller than that error is reported as *borderline*, not as a
   fail, so a candidate is never rejected on a difference the model cannot resolve; the builder
