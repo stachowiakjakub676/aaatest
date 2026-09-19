@@ -3,6 +3,7 @@ import { PROPERTY_BY_KEY, describePreference, describeStructural, evaluateSpecif
 import type { CandidateRecord, CheckStatus, PropertyValue } from "@molecular-cad/design-engine";
 import type { Molecule } from "@molecular-cad/molecule-model";
 import type { ChemistryState } from "../../chemistry/useChemistry";
+import type { ChemistryEngine } from "../../chemistry/engine";
 import { profileFromChemistry } from "../../design/profile";
 import type { SpecificationApi } from "../../design/useSpecification";
 import type { DesignRunApi } from "../../design/useDesignRun";
@@ -14,6 +15,8 @@ export interface DesignViewProps {
   runApi: DesignRunApi;
   molecule: Molecule;
   chemistry: ChemistryState;
+  /** In-browser engine for depictions. */
+  engine: ChemistryEngine;
   onOpenEditor(): void;
   onOpenCandidate(record: CandidateRecord): void;
 }
@@ -43,7 +46,7 @@ function Actual({ value }: { value: PropertyValue | null }) {
  * live check of the molecule open in the editor on the right. Candidate generation, filtering
  * and comparison plug into the same evaluation in later phases.
  */
-export function DesignView({ api, runApi, molecule, chemistry, onOpenEditor, onOpenCandidate }: DesignViewProps) {
+export function DesignView({ api, runApi, molecule, chemistry, engine, onOpenEditor, onOpenCandidate }: DesignViewProps) {
   const { spec, issues } = api;
   const profile = useMemo(() => profileFromChemistry(molecule, chemistry), [molecule, chemistry]);
   const hasAtoms = molecule.atoms.length > 0;
@@ -158,7 +161,7 @@ export function DesignView({ api, runApi, molecule, chemistry, onOpenEditor, onO
             </>
           )}
         </section>
-        <CandidatesPanel api={runApi} spec={spec} issues={issues} seed={molecule} onOpenCandidate={onOpenCandidate} />
+        <CandidatesPanel api={runApi} spec={spec} issues={issues} seed={molecule} engine={engine} onOpenCandidate={onOpenCandidate} />
       </div>
     </section>
   );

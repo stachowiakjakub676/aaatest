@@ -109,6 +109,27 @@ test("design workspace: generate derivatives of the editor molecule, validate th
   await expect(page.locator("#pareto-front")).toContainText("Pareto front");
   await expect(page.locator(".candidate-table .rank-badge.front").first()).toBeVisible();
   await expect(page.locator("#tradeoffs .xy-chart svg circle").first()).toBeVisible();
+  // Compare the Pareto front side by side: 2D depictions, 3D viewports, verdicts and every available property.
+  await page.click("#btn-compare-front");
+  await expect(page.locator("#comparison")).toBeVisible();
+  await expect(page.locator("#comparison th.compare-col").first()).toBeVisible();
+  await expect(page.locator("#comparison .structure-svg svg").first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator("#comparison .compare-3d canvas").first()).toBeVisible();
+  await expect(page.locator("#comparison")).toContainText("Hard constraints");
+  await expect(page.locator("#comparison")).toContainText("Normal boiling point");
+  await expect(page.locator("#comparison td.compare-best").first()).toBeVisible(); // lower Tb is preferred
+  const csv = page.waitForEvent("download");
+  await page.click("#btn-compare-csv");
+  expect((await csv).suggestedFilename()).toBe("clapeyron-comparison.csv");
+  await page.getByRole("button", { name: "Close comparison" }).click();
+  await expect(page.locator("#comparison")).toHaveCount(0);
+  // Manual selection: tick two rows, compare.
+  const picks = page.locator(".candidate-table .compare-pick:not([disabled])");
+  await picks.nth(0).check();
+  await picks.nth(1).check();
+  await page.click("#btn-compare");
+  await expect(page.locator("#comparison th.compare-col")).toHaveCount(2);
+  await page.getByRole("button", { name: "Close comparison" }).click();
   await page.locator("#cand-filter").getByRole("radio", { name: "passing", exact: true }).click();
   const passing = await rows.count();
   expect(passing).toBeGreaterThan(0);

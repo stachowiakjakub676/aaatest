@@ -3,15 +3,21 @@ import { GENERATORS, PROPERTY_BY_KEY, filterRecords, hasErrors, rankRecords, ser
 import type { CandidateFilter, CandidateRecord, CheckStatus, GeneratorParams, RankedRecord, Specification, SpecificationIssue } from "@molecular-cad/design-engine";
 import type { Molecule } from "@molecular-cad/molecule-model";
 import type { DesignRunApi } from "../../design/useDesignRun";
+import type { ChemistryEngine } from "../../chemistry/engine";
 import { XyChart } from "../XyChart";
+import { ComparisonPanel } from "./ComparisonPanel";
 
 export interface CandidatesPanelProps {
   api: DesignRunApi;
   spec: Specification;
   issues: SpecificationIssue[];
   seed: Molecule;
+  /** In-browser engine for 2D depictions in the comparison. */
+  engine: ChemistryEngine;
   onOpenCandidate(record: CandidateRecord): void;
 }
+
+const MAX_COMPARE = 6;
 
 const VERDICT: Record<CheckStatus, { label: string; cls: string }> = { pass: { label: "✓ pass", cls: "ok" }, fail: { label: "✗ fail", cls: "err" }, borderline: { label: "△ borderline", cls: "warn" }, unknown: { label: "? undecided", cls: "warn" } };
 const FILTERS: Array<[CandidateFilter, string]> = [
@@ -45,12 +51,14 @@ function download(name: string, text: string) {
 }
 
 /** Candidate generation and validation (phase 3B). Evaluation, filtering and ranking join in 3C/3D. */
-export function CandidatesPanel({ api, spec, issues, seed, onOpenCandidate }: CandidatesPanelProps) {
+export function CandidatesPanel({ api, spec, issues, seed, engine, onOpenCandidate }: CandidatesPanelProps) {
   const [generatorId, setGeneratorId] = useState(GENERATORS[0]!.id);
   const [limit, setLimit] = useState("60");
   const [filter, setFilter] = useState<CandidateFilter>("all");
   const [order, setOrder] = useState<"generation" | "ranking">("ranking");
   const [open, setOpen] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [comparing, setComparing] = useState(false);
   const generator = GENERATORS.find((g) => g.id === generatorId)!;
   const broken = hasErrors(issues);
   const seedEmpty = seed.atoms.length === 0;
@@ -64,6 +72,8 @@ export function CandidatesPanel({ api, spec, issues, seed, onOpenCandidate }: Ca
     return [...kept].sort((a, b) => (a.ranking.position ?? 1e9) - (b.ranking.position ?? 1e9) || ranked.indexOf(a) - ranked.indexOf(b));
   }, [ranked, filter, order, ranking]);
   const objectives = ranking?.objectives ?? [];
+  const selectedRecords = ranked.filter((r) => selected.includes(r.candidate.id));
+  const toggle = (id: string) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : s.length >= MAX_COMPARE ? s : [...s, id]));
   const scatter = objectives.length === 2 && ranking ? ranking.ordered.map((r) => ({ x: r.ranking.objectives[0]!.value!, y: r.ranking.objectives[1]!.value!, cls: r.ranking.paretoFront === 1 ? "marker" : "point", title: `${r.candidate.name}: ${objectives[0]!.label} ${fmt(r.ranking.objectives[0]!.value!)}, ${objectives[1]!.label} ${fmt(r.ranking.objectives[1]!.value!)}${r.ranking.paretoFront === 1 ? " · Pareto front" : ""}` })) : [];
   // Properties the specification talks about, shown as columns (hard constraints first, then preferences).
   const columns = [...new Set([...spec.hard.map((c) => c.property), ...spec.soft.map((p) => p.property)])].filter((k) => PROPERTY_BY_KEY.has(k));
@@ -186,7 +196,18 @@ export function CandidatesPanel({ api, spec, issues, seed, onOpenCandidate }: Ca
               )}
               {ranking.front.length > 0 && (
                 <p className="hint" id="pareto-front">
-                  Pareto front ({ranking.front.length} of {ranking.population} ranked): {ranking.front.map((r) => r.candidate.name).join("; ")}.
+                  Pareto front ({ranking.front.length} of {ranking.population} ranked): {ranking.front.map((r) => r.candidate.name).join("; ")}.{" "}
+                  <button
+                    type="button"
+                    className="link-btn"
+                    id="btn-compare-front"
+                    onClick={() => {
+                      setSelected(ranking.front.slice(0, MAX_COMPARE).map((r) => r.candidate.id));
+                      setComparing(true);
+                    }}
+                  >
+                    Compare the front
+                  </button>
                 </p>
               )}
               {scatter.length > 1 && (
@@ -205,9 +226,21 @@ export function CandidatesPanel({ api, spec, issues, seed, onOpenCandidate }: Ca
               )}
             </section>
           )}
+          <div className="button-row">
+            <button type="button" className="btn btn-small" id="btn-compare" disabled={selectedRecords.length < 2} onClick={() => setComparing(true)} title={`Compare the ticked candidates side by side (up to ${MAX_COMPARE})`}>
+              Compare selected ({selectedRecords.length})
+            </button>
+            {selected.length > 0 && (
+              <button type="button" className="btn btn-small" onClick={() => setSelected([])}>
+                Clear selection
+              </button>
+            )}
+          </div>
+          {comparing && selectedRecords.length > 0 && <ComparisonPanel records={selectedRecords} spec={spec} engine={engine} onOpen={onOpenCandidate} onClose={() => setComparing(false)} />}
           <table className="solvent-table candidate-table">
             <thead>
               <tr>
+                <th />
                 <th>#</th>
                 <th>candidate</th>
                 <th>verdict</th>
@@ -228,6 +261,9 @@ export function CandidatesPanel({ api, spec, issues, seed, onOpenCandidate }: Ca
                 const expanded = open === r.candidate.id;
                 return [
                   <tr key={r.candidate.id} className={`cand-${r.status} ${verdict ? `check-${verdict}` : ""}`} title={r.status === "rejected" ? `${r.rejection?.stage}: ${r.rejection?.reason}` : checksText(r)}>
+                    <td>
+                      <input type="checkbox" className="compare-pick" aria-label={`Select ${r.candidate.name} for comparison`} checked={selected.includes(r.candidate.id)} onChange={() => toggle(r.candidate.id)} disabled={r.status === "rejected"} />
+                    </td>
                     <td className="mono">{i + 1}</td>
                     <td>
                       {r.candidate.name}
@@ -280,7 +316,7 @@ export function CandidatesPanel({ api, spec, issues, seed, onOpenCandidate }: Ca
                   </tr>,
                   expanded && r.evaluation ? (
                     <tr key={`${r.candidate.id}-checks`} className="checks-row">
-                      <td colSpan={4 + columns.length + (objectives.length > 0 ? 1 : 0)}>
+                      <td colSpan={5 + columns.length + (objectives.length > 0 ? 1 : 0)}>
                         <ul className="reasoning">
                           {r.evaluation.constraints.map((c) => (
                             <li key={c.constraintId} className={`check-${c.status}`}>

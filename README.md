@@ -273,6 +273,12 @@ generation, filtering, ranking and comparison follow in phases 3B–3F on the sa
   the Pareto front members and, for two objectives, a scatter with the front highlighted.
   Ineligible candidates say why (failed, missing value, not evaluated). There is no single
   "best molecule": the front keeps every trade-off visible, the weights only order it.
+- **Comparison (phase 3E).** Tick up to six candidates (or *Compare the front*) for a
+  side-by-side matrix: 2D depiction and a rotatable 3D structure per candidate, verdict and
+  rank, the hard constraints with each candidate's verdict and value, then every property any
+  of them has a value for, grouped by domain, each tagged computed or predicted with the method
+  and error on hover. A cell is highlighted as best in its row only where a soft preference says
+  which direction is better. The matrix exports as CSV; any column opens in the editor.
 - **Margins.** Predicted properties carry a typical error (13 K for the Joback boiling point,
   1 log unit for ESOL, …). A miss smaller than that error is reported as *borderline*, not as a
   fail, so a candidate is never rejected on a difference the model cannot resolve; the builder

@@ -601,7 +601,7 @@ export function App() {
         </div>
       </header>
 
-      {view === "design" && <DesignView api={specification} runApi={designRun} molecule={molecule} chemistry={chemistry.state} onOpenEditor={() => setView("editor")} onOpenCandidate={openCandidate} />}
+      {view === "design" && <DesignView api={specification} runApi={designRun} molecule={molecule} chemistry={chemistry.state} engine={wasmEngine} onOpenEditor={() => setView("editor")} onOpenCandidate={openCandidate} />}
       {view === "editor" && (
       <Toolbox
         mode={mode}
